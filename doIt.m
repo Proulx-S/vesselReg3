@@ -77,6 +77,18 @@ switch envId
         %     setenv("PATH",getenv("PATH") + neurodeskModule{i});
         % end
 end
+
+% %%% conda (base system)
+% switch envId
+%     case 1
+%         %%%% skan (https://skeleton-analysis.org/stable/getting_started/install.html)
+%         [envNotFound,result] = system('ml nipype/1.8.3; python -c "import skan; print(''skan imported successfully'')"');
+%         if envNotFound; disp(['skan not installed. Run:' newline 'conda install -c conda-forge skan' newline 'to install it on your base system.']); else; disp('skan already installed'); end
+%     otherwise
+%         dbstack; error('not implemented')
+% end
+    
+
 %% %%%%%%%%%%%%%%%%%%
 disp(projectCode)
 disp(projectStorage)
@@ -130,7 +142,7 @@ forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 tof_vesselSeg = fullfile(projectScratch,'tof','seg'); if ~exist(tof_vesselSeg,'dir'); mkdir(tof_vesselSeg); end
 tof_vesselSeg = fullfile(tof_vesselSeg,'tof.nii.gz');
-if forceThis || ~exist(tof_vesselSeg,'file');
+if forceThis || ~exist(tof_vesselSeg,'file')
     vesselboost_prediction(fileparts(tof),fileparts(tof_vesselSeg),vesselBoostModel,4);
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -176,7 +188,7 @@ mriVesselLabels = MRIread(tof_skeleton_skimage_label);
 vesselMaskList = cell(length(okCompIdx), 1);
 for i = 1:length(okCompIdx)
     vesselMaskList{i} = fullfile(fileparts(tof_skeleton_skimage_label), ['tof_skeleton_label_' num2str(okCompIdx(i)) '.nii.gz']);
-    if ~forceThis && exist(vesselMaskList{i}, 'file'); continue; end
+    if exist(vesselMaskList{i}, 'file') && ~forceThis; continue; end
     tmp = mriVesselLabels;
     tmp.vol = zeros(size(tmp.vol));
     tmp.vol(mriVesselLabels.vol == okCompIdx(i)) = 1;
@@ -187,12 +199,12 @@ end
 
 
 
-
+return
 
 forceThis = 1;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Extract centerlines from skeleton for each vessel
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Extract centerlines from skeleton mask of each vessel
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Create centerline VTK files for each identified vessel skeleton
 % Using graph extraction to preserve full branching structure
 % Use original TOF volume as reference for affine transformation to ensure
@@ -203,16 +215,15 @@ for i = 1:length(vesselMaskList)
     % This creates a full graph where each skeleton voxel is a node
     % and edges connect adjacent voxels, preserving branching structure
     vesselCenterlineList{i} = replace(replace(vesselMaskList{i}, '.nii.gz', '.vtk'),'/seg/','/centerlines/');
-    if ~forceThis && exist(vesselCenterlineList{i}, 'file'); continue; end
-    % Use original TOF volume as reference for affine to ensure correct spatial coordinates
-    skeleton_to_graph_vtk(vesselMaskList{i}, vesselCenterlineList{i}, 26, forceThis, tof);
+    if exist(vesselCenterlineList{i}, 'file') && ~forceThis; continue; end
+    skeleton_to_graph_vtk(vesselMaskList{i}, vesselCenterlineList{i}, 26, forceThis);
+    % skan_skeletonMask_to_vtk(vesselMaskList{i}, vesselCenterlineList{i}, forceThis);
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 i = 3;
-vmtk_viewVolAndSurf(tof, vesselCenterlineList{i});
-vmtk_viewVolAndCenterlines(tof, vesselCenterlineList{i});
+vmtk_viewVolAndSurf(vesselMaskList{i}, vesselCenterlineList{i});
 
 
 
