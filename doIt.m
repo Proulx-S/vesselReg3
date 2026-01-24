@@ -120,6 +120,16 @@ if 0
     out = fullfile(projectCode,'data','tof'); if ~exist(out,'dir'); mkdir(out); end
     tof = fullfile(out,'tof.nii.gz');
     copyfile(in,tof);
+    switch S
+        case 2
+            in = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none/tofBrain.nii.gz';
+            out = fullfile(projectCode,'data','tofBrain'); if ~exist(out,'dir'); mkdir(out); end
+            tofBrain = fullfile(out,'tof.nii.gz');
+            copyfile(in,tofBrain);
+        otherwise
+            error('not implemented')
+    end
+    
 
     %vfMRI
     in = roi{S}.(acq).(task).rCond.fOrigList{1};
@@ -130,10 +140,143 @@ if 0
 else
     %%%%%%%%%%%%%%%%%
     %% Get data files
-    tof   = fullfile(projectCode,'data','tof'  ,'tof.nii.gz'  );
-    vfMRI = fullfile(projectCode,'data','vfMRI','vfMRI.nii.gz');
+    tof      = fullfile(projectCode,'data','tof'     ,'tof.nii.gz'  );
+    tofBrain = fullfile(projectCode,'data','tofBrain','tof.nii.gz'  );
+    vfMRI    = fullfile(projectCode,'data','vfMRI'   ,'vfMRI.nii.gz');
     %% %%%%%%%%%%%%%%
 end
+
+
+
+forceThis = 1;
+usList = [1 2 4 8];
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Vesselboost on upsampled tof
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tofSegList = cell(length(usList), 1);
+for i = 1:length(usList)
+    % Crop and upsample tof
+    I1 = usList(i);    
+    disp('-----------------------');
+    disp('-----------------------');
+    disp(['Upsampling tof by ' num2str(I1) 'x...']);
+    disp('-----------------------');
+    disp('-----------------------');
+    tof_upsampled = replace(tof, '/data/tof/', ['/tmp/tofUps' num2str(I1) 'x/']);
+    if ~exist(fileparts(tof_upsampled),'dir'); mkdir(fileparts(tof_upsampled)); end
+    mri = MRIread(tofBrain);
+    [dim1, dim2, dim3] = ind2sub(size(mri.vol), find(mri.vol > 0));
+    dim1 = [min(dim1) max(dim1)]; if mod(mean(dim1),1); dim1(1) = dim1(1) - 1; end; dim1 = dim1 + [-1 1];
+    dim2 = [min(dim2) max(dim2)]; if mod(mean(dim2),1); dim2(1) = dim2(1) - 1; end; dim2 = dim2 + [-1 1];
+    dim3 = [min(dim3) max(dim3)];
+    if forceThis || ~exist(tof_upsampled,'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cropCenter = [mean(dim2) mean(dim1) 0].*I1;
+        cropSize = [range(dim2)+1 range(dim1)+1 range(dim3)+1].*I1;    
+        cmd{end+1} = ['--crop '     strjoin(arrayfun(@num2str, cropCenter, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize ' strjoin(arrayfun(@num2str, cropSize  , 'UniformOutput', false), ' ') ' \'];
+        % cmd{end+1} = ['--crop ' num2str(200*I1) ' ' num2str(200*I1) ' 0 \'];
+        % cmd{end+1} = ['--cropsize ' num2str(300*I1) ' ' num2str(300*I1) ' ' num2str(36*I1) ' \'];
+        cmd{end+1} = ['--resample_type cubic \'];
+        cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
+        cmd{end+1} = [tof ' \'];
+        cmd{end+1} = [tof_upsampled];
+        system(strjoin(cmd,newline),'-echo');
+    end
+    % cmd = {src.fs};
+    % cmd{end+1} = 'freeview \';
+    % cmd{end+1} = ['-v ' tof ' \'];
+    % cmd{end+1} = ['-v ' tof_upsampled ' \'];
+    % disp(strjoin(cmd,newline));
+
+    % Vesselboost
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Vesselboost on upsampled ' num2str(I1) 'x tof...']);
+    disp('----------------------------------');
+    disp('----------------------------------');
+
+    tof_upsampled_prc = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrc/']); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
+    tof_upsampled_seg = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
+    if forceThis || ~exist(tof_upsampled_seg,'file')
+        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,3);
+    end
+    % Reduce precision and decompress
+    tofSegList{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    cmd = {src.fs};
+    cmd{end+1} = 'mri_convert \';
+    cmd{end+1} = '--out_data_type uchar \';
+    cmd{end+1} = [tof_upsampled_seg ' \'];
+    cmd{end+1} = tofSegList{i};
+    system(strjoin(cmd,newline),'-echo');
+end
+tofSegList
+
+
+return
+
+
+
+
+I1 = 4;
+tof_upsampled = replace(tof, '/tof/', ['/tofUps' num2str(I1) 'x/']);
+if ~exist(fileparts(tof_upsampled),'dir'); mkdir(fileparts(tof_upsampled)); end
+if forceThis || ~exist(tof_upsampled,'file')
+    cmd = {src.fs};
+    cmd{end+1} = 'mri_convert \';
+    cmd{end+1} = ['--resample_type cubic \'];
+    cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
+    cmd{end+1} = [tof ' \'];
+    cmd{end+1} = [tof_upsampled];
+    system(strjoin(cmd,newline),'-echo');
+end
+tofOrig = tof;
+tof = tof_upsampled;
+
+
+
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+% Skullstrip (extract the brain) using FreeSurfer's machine learning approach: mri_synthstrip
+% Output: 'tof_brain.nii.gz' in the same folder as 'tof'
+tof_brain     = replace(tof,'/tof/','/tofBrain/'); if ~exist(fileparts(tof_brain),'dir'); mkdir(fileparts(tof_brain)); end
+tof_brainMask = replace(tof,'/tof/','/tofBrainMask/'); if ~exist(fileparts(tof_brainMask),'dir'); mkdir(fileparts(tof_brainMask)); end
+tof_brainDist = replace(tof,'/tof/','/tofBrainDist/'); if ~exist(fileparts(tof_brainDist),'dir'); mkdir(fileparts(tof_brainDist)); end
+
+cmd = {src.fs};
+cmd{end+1} = 'mri_synthstrip \';
+cmd{end+1} = ['-i ' tof ' \'];
+cmd{end+1} = ['-m ' tof_brainMask ' \'];
+cmd{end+1} = ['-d ' tof_brainDist ' \'];
+cmd{end+1} = ['-o ' tof_brain];
+disp(strjoin(cmd,newline))
+system(strjoin(cmd,newline),'-echo');
+
+
+
+return
+% tof = tofOrig;
+forceThis = 0;
+I1 = 4;
+tof_upsampled = replace(tof, '/tof/', ['/tofUps' num2str(I1) 'x/']);
+if ~exist(fileparts(tof_upsampled),'dir'); mkdir(fileparts(tof_upsampled)); end
+if forceThis || ~exist(tof_upsampled,'file')
+    cmd = {src.fs};
+    cmd{end+1} = 'mri_convert \';
+    cmd{end+1} = ['--resample_type cubic \'];
+    cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
+    cmd{end+1} = [tof ' \'];
+    cmd{end+1} = [tof_upsampled];
+    system(strjoin(cmd,newline),'-echo');
+end
+tofOrig = tof;
+tof = tof_upsampled;
+
+
 
 
 forceThis = 1;
@@ -142,26 +285,31 @@ forceThis = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 tof_vesselSeg = fullfile(projectScratch,'tof','seg'); if ~exist(tof_vesselSeg,'dir'); mkdir(tof_vesselSeg); end
 tof_vesselSeg = fullfile(tof_vesselSeg,'tof.nii.gz');
+ps_path = fullfile(projectScratch,'ps'); if ~exist(ps_path,'dir'); mkdir(ps_path); end
 if forceThis || ~exist(tof_vesselSeg,'file')
-    vesselboost_prediction(fileparts(tof),fileparts(tof_vesselSeg),vesselBoostModel,4);
+    vesselboost_prediction(fileparts(tof),fileparts(tof_vesselSeg),ps_path,vesselBoostModel,3); % should also try with prepmode=3 (bias field correction and denoising preprocessing)
 end
-tof_vesselSegX = replace(tof_vesselSeg, '.nii.gz', 'US.nii');
 %reduce precision and don't compress
+tmp = replace(tof_vesselSeg, '.nii.gz', '.nii');
 cmd = {src.fs};
 cmd{end+1} = 'mri_convert \';
+% cmd{end+1} = '--out_data_type int \';
 cmd{end+1} = '--out_data_type uchar \';
 cmd{end+1} = [tof_vesselSeg ' \'];
-cmd{end+1} = tof_vesselSegX;
+cmd{end+1} = tmp;
 system(strjoin(cmd,newline),'-echo');
-%upsample
-I = 8;
-cmd = {src.fs};
-cmd{end+1} = 'mri_convert \';
-cmd{end+1} = ['--upsample ' num2str(I) ' \'];
-cmd{end+1} = ['--resample_type nearest \'];
-cmd{end+1} = [tof_vesselSegX ' \'];
-cmd{end+1} = tof_vesselSegX;
-system(strjoin(cmd,newline),'-echo');
+tof_vesselSeg = tmp;
+
+
+% %upsample
+% I = 8;
+% cmd = {src.fs};
+% cmd{end+1} = 'mri_convert \';
+% cmd{end+1} = ['--upsample ' num2str(I) ' \'];
+% cmd{end+1} = ['--resample_type nearest \'];
+% cmd{end+1} = [tof_vesselSegX ' \'];
+% cmd{end+1} = tof_vesselSegX;
+% system(strjoin(cmd,newline),'-echo');
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -170,26 +318,147 @@ system(strjoin(cmd,newline),'-echo');
 %% Individualize and skeletonize vessels
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % find connected components (vessels)
-mrixSeg = MRIread(tof_vesselSegX);
-mrixSeg.vol = logical(mrixSeg.vol);
+mriSeg = MRIread(tof_vesselSeg);
+mriSeg.vol = logical(mriSeg.vol);
 disp('bwconncomp: running...');
-CC = bwconncomp(mrixSeg.vol,26);
+CC = bwconncomp(mriSeg.vol,26);
 disp('bwconncomp: done');
-% create a mask for each vessel
-mrixVesselSeg = cell(CC.NumObjects, 1);
-mrixVesselSkel = cell(CC.NumObjects, 1);
-n = zeros(CC.NumObjects, 1);
-for v = 1:CC.NumObjects
-    %!!!!should crop here!!!!!
-    mrixVesselSeg{v} = mrixSeg;
-    mrixVesselSeg{v}.vol = false(size(mrixSeg.vol));
-    mrixVesselSeg{v}.vol(CC.PixelIdxList{v}) = true;
-    % skeletonize individual vessel
-    mrixVesselSkel{v} = mrixSeg;
-    disp(['bwskel: running... ' num2str(v) '/' num2str(CC.NumObjects)]);
-    mrixVesselSkel{v}.vol = bwskel(mrixVesselSeg{v}.vol);
-    nx(v) = nnz(mrixVesselSkel{v}.vol);
+% sort vessels from big to small vessel network volume
+[~,b] = sort(cellfun('length',CC.PixelIdxList),'descend');
+CC.PixelIdxList = CC.PixelIdxList(b);
+% label indivudal vessels in a single map for visualization
+mriVesselLabel = mriSeg;
+mriVesselLabel.vol = zeros(size(mriSeg.vol));
+for v = 1:length(CC.PixelIdxList)
+    mriVesselLabel.vol(CC.PixelIdxList{v}) = v;
 end
+mriVesselLabel.fspec = replace(tof_vesselSeg,'.nii','_vesselLabels.nii');
+MRIwrite(mriVesselLabel, mriVesselLabel.fspec);
+% visualize vessel labels
+cmd = {src.fs};
+cmd{end+1} = 'freeview \';
+cmd{end+1} = ['-v ' tof ' \'];
+cmd{end+1} = ['-v ' vfMRI ' \'];
+cmd{end+1} = ['-v ' tof_vesselSeg ' \'];
+cmd{end+1} = ['-v ' mriVesselLabel.fspec];
+disp(strjoin(cmd,newline));
+% select vessels
+% vesselIdx = sort([33 17 19 20 13 52 15 10]); % 1 is supuriously connected to the sagittal sinus
+vesselIdx = sort([31 19 18 123 10 17 8 11]); % vesselboos on upsampled tof x 2 and prepmode=3 % 2 and 3 are supuriously connected to sinus
+return
+
+
+% process selected vessels --method 1
+mriTof = MRIread(tof);
+I = 8/I1; P = I/2;
+for v = 1:length(vesselIdx)
+    %crop
+    mriVessel = mriVesselLabel;
+    mriVessel.fspec = replace(mriVesselLabel.fspec, '.nii', '_tmpVesselOrig.nii');
+    mriVessel.vol = mriVesselLabel.vol==vesselIdx(v);
+    inds = find(mriVessel.vol);
+    [dim1, dim2, dim3] = ind2sub(size(mriVessel.vol), inds);
+    mriVessel.bbox.min = [min(dim1), min(dim2), min(dim3)];
+    mriVessel.bbox.max = [max(dim1), max(dim2), max(dim3)];
+    mriVessel.bbox.size = mriVessel.bbox.max - mriVessel.bbox.min + 1;
+    dim1S = mriVessel.bbox.min(1); dim1E = mriVessel.bbox.max(1); dim2S = mriVessel.bbox.min(2); dim2E = mriVessel.bbox.max(2); dim3S = mriVessel.bbox.min(3); dim3E = mriVessel.bbox.max(3);
+    mriVessel.vol = mriVessel.vol(dim1S:dim1E, dim2S:dim2E, dim3S:dim3E);
+    mriVessel.volTof = mriTof.vol(dim1S:dim1E, dim2S:dim2E, dim3S:dim3E);
+    %zero pad
+    mriVessel.vol = padarray(mriVessel.vol,[P P P],0,'both');
+    mriVessel.volTof = padarray(mriVessel.volTof,[P P P],0,'both');
+    %upsample
+    mriVessel.fspec = replace(mriVesselLabel.fspec, '.nii', '_tmpVesselProcessed.nii');
+    mriVessel.vol = imresize3(double(mriVessel.vol),I,'lanczos3')>0.5;
+    mriVessel.volTof = imresize3(double(mriVessel.volTof),I,'lanczos3');
+    %closing (dilate then erode) fills gaps
+    mriVessel.vol = imclose(mriVessel.vol,strel('sphere',I));
+    %opening (erode then dilate) removes corner protrusions and small artifacts
+    mriVessel.vol = imopen(mriVessel.vol,strel('sphere',1));
+    %smooth
+    mriVessel.vol = imgaussfilt3(double(mriVessel.vol),I)>1/I;
+    %skeletonize
+    mriVessel.vol = bwskel(mriVessel.vol,'MinBranchLength',I*2);
+    %threshold distance transform
+    mriVessel.vol = bwdist(mriVessel.vol)<I;
+    MRIwrite(mriVessel, mriVessel.fspec); disp(mriVessel.fspec)
+    %surface
+    surfFile = replace(mriVessel.fspec, '.nii', '.vtk');
+    vmtk_surfFromSeg(mriVessel.fspec, surfFile)
+    %centerline
+    lineFile = replace(surfFile, '.vtk', '.line.vtk');
+    cmd = vmtk_centerlinesFromSurf(surfFile, lineFile,[],[],1);
+    disp(strjoin(cmd,newline));
+
+    %write vessel tof
+    mri = mriVessel; mri.vol = mri.volTof; mri.fspec = replace(mriVessel.fspec, '.nii', '_tmpVesselTof.nii'); MRIwrite(mri, mri.fspec); disp(mri.fspec)
+    %view
+    vmtk_viewVolAndSurf(mri.fspec, lineFile)
+end
+
+
+% process selected vessels --method 2
+mriTof = MRIread(tof);
+I = 8/I1; P = I/2;
+for v = 1:length(vesselIdx)
+    %crop
+    mriVessel = mriVesselLabel;
+    mriVessel.fspec = replace(mriVesselLabel.fspec, '.nii', '_tmpVesselOrig.nii');
+    mriVessel.vol = mriVesselLabel.vol==vesselIdx(v);
+    inds = find(mriVessel.vol);
+    [dim1, dim2, dim3] = ind2sub(size(mriVessel.vol), inds);
+    mriVessel.bbox.min = [min(dim1), min(dim2), min(dim3)];
+    mriVessel.bbox.max = [max(dim1), max(dim2), max(dim3)];
+    mriVessel.bbox.size = mriVessel.bbox.max - mriVessel.bbox.min + 1;
+    dim1S = mriVessel.bbox.min(1); dim1E = mriVessel.bbox.max(1); dim2S = mriVessel.bbox.min(2); dim2E = mriVessel.bbox.max(2); dim3S = mriVessel.bbox.min(3); dim3E = mriVessel.bbox.max(3);
+    mriVessel.vol = mriVessel.vol(dim1S:dim1E, dim2S:dim2E, dim3S:dim3E);
+    mriVessel.volTof = mriTof.vol(dim1S:dim1E, dim2S:dim2E, dim3S:dim3E);
+    %zero pad
+    mriVessel.vol = padarray(mriVessel.vol,[P P P],0,'both');
+    mriVessel.volTof = padarray(mriVessel.volTof,[P P P],0,'both');
+    %upsample
+    mriVessel.fspec = replace(mriVesselLabel.fspec, '.nii', '_tmpVesselProcessed.nii');
+    mriVessel.vol = imresize3(double(mriVessel.vol),I,'lanczos3')>0.75;
+    mriVessel.volTof = imresize3(double(mriVessel.volTof),I,'lanczos3');
+    %skeletonize
+    mriVessel.vol = bwskel(mriVessel.vol,'MinBranchLength',I*2);
+    %threshold distance transform
+    mriVessel.vol = bwdist(mriVessel.vol)<2;
+    MRIwrite(mriVessel, mriVessel.fspec); disp(mriVessel.fspec)
+
+
+
+    %closing (dilate then erode) fills gaps
+    mriVessel.vol = imclose(mriVessel.vol,strel('sphere',I));
+    %opening (erode then dilate) removes corner protrusions and small artifacts
+    mriVessel.vol = imopen(mriVessel.vol,strel('sphere',1));
+
+
+
+    %smooth
+    mriVessel.vol = imgaussfilt3(double(mriVessel.vol),I)>1/I;
+    %surface
+    surfFile = replace(mriVessel.fspec, '.nii', '.vtk');
+    vmtk_surfFromSeg(mriVessel.fspec, surfFile)
+    %centerline
+    lineFile = replace(surfFile, '.vtk', '.line.vtk');
+    cmd = vmtk_centerlinesFromSurf(surfFile, lineFile,[],[],1);
+    disp(strjoin(cmd,newline));
+
+    %write vessel tof
+    mri = mriVessel; mri.vol = mri.volTof; mri.fspec = replace(mriVessel.fspec, '.nii', '_tmpVesselTof.nii'); MRIwrite(mri, mri.fspec); disp(mri.fspec)
+    %view
+    vmtk_viewVolAndSurf(mri.fspec, lineFile)
+end
+
+
+
+output_vtk = skeleton_to_graph_vtk(skeleton_nii, output_vtk, connectivity, forceThis)
+
+
+return
+
+
 disp(['bwskel: done']);
 % sort vessels from long to short vessel network
 [~,b] = sort(nx,'descend');
