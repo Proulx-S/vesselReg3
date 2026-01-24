@@ -94,7 +94,7 @@ disp(projectCode)
 disp(projectStorage)
 disp(projectScratch)
 
-
+S=2; arxvDir = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none';
 if 0
     %%%%%%%%%%%%%%%%%%
     %% Copy data files
@@ -114,7 +114,6 @@ if 0
     s = 6; % ok
     s = 7; % some movements, not clear if rigid
 
-    S=2;
     %tof
     in = fullfile(roi{S}.(acq).(task).rCond.volAnat.tof.folder,roi{S}.(acq).(task).rCond.volAnat.tof.name);
     out = fullfile(projectCode,'data','tof'); if ~exist(out,'dir'); mkdir(out); end
@@ -122,7 +121,7 @@ if 0
     copyfile(in,tof);
     switch S
         case 2
-            in = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none/tofBrain.nii.gz';
+            in = fullfile(arxvDir,'tofBrain.nii.gz');
             out = fullfile(projectCode,'data','tofBrain'); if ~exist(out,'dir'); mkdir(out); end
             tofBrain = fullfile(out,'tof.nii.gz');
             copyfile(in,tofBrain);
@@ -148,12 +147,14 @@ end
 
 
 
-forceThis = 1;
-usList = [1 2 4 8];
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Vesselboost on upsampled tof
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-tofSegList = cell(length(usList), 1);
+forceThis = 0;
+arxvThis  = 0;
+usList = [1 2 3 4 6 8];
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Vesselboost on cropped -> upsampled -> bias-field-corrected -> denoised tof
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tofSegList1 = cell(length(usList), 1);
+tofSegList2 = cell(length(usList), 1);
 for i = 1:length(usList)
     % Crop and upsample tof
     I1 = usList(i);    
@@ -178,40 +179,146 @@ for i = 1:length(usList)
         cmd{end+1} = ['--cropsize ' strjoin(arrayfun(@num2str, cropSize  , 'UniformOutput', false), ' ') ' \'];
         % cmd{end+1} = ['--crop ' num2str(200*I1) ' ' num2str(200*I1) ' 0 \'];
         % cmd{end+1} = ['--cropsize ' num2str(300*I1) ' ' num2str(300*I1) ' ' num2str(36*I1) ' \'];
-        cmd{end+1} = ['--resample_type cubic \'];
-        cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
+        if I1~=1
+            cmd{end+1} = ['--resample_type cubic \'];
+            cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
+        end
         cmd{end+1} = [tof ' \'];
         cmd{end+1} = [tof_upsampled];
         system(strjoin(cmd,newline),'-echo');
     end
-    % cmd = {src.fs};
-    % cmd{end+1} = 'freeview \';
-    % cmd{end+1} = ['-v ' tof ' \'];
-    % cmd{end+1} = ['-v ' tof_upsampled ' \'];
-    % disp(strjoin(cmd,newline));
 
-    % Vesselboost
+    % Vesselboost (no preprocessing)
     disp('----------------------------------');
     disp('----------------------------------');
-    disp(['Vesselboost on upsampled ' num2str(I1) 'x tof...']);
+    disp(['Vesselboost (without preprocessing) on upsampled ' num2str(I1) 'x tof...']);
     disp('----------------------------------');
     disp('----------------------------------');
 
-    tof_upsampled_prc = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrc/']); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
+    tof_upsampled_prc = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'x/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
     tof_upsampled_seg = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
+    if forceThis || ~exist(tof_upsampled_seg,'file')
+        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,4);
+    end
+    % Reduce precision and decompress
+    tofSegList1{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    if forceThis || ~exist(tofSegList1{i},'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = '--out_data_type uchar \';
+        cmd{end+1} = [tof_upsampled_seg ' \'];
+        cmd{end+1} = tofSegList1{i};
+        system(strjoin(cmd,newline),'-echo');
+    end
+    % Archive
+    arxvFile = strsplit(tofSegList1{i}, '/'); arxvFile = fullfile(arxvDir,[arxvFile{end-1} '.nii.gz']);
+    if arxvThis || ~exist(arxvFile,'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = [tofSegList1{i} ' \'];
+        cmd{end+1} = arxvFile;
+        system(strjoin(cmd,newline),'-echo');
+    end
+
+    % Vesselboost (including bias-field-correction and denoising preprocessing)
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Preprocessing and vesselboost on upsampled ' num2str(I1) 'x tof...']);
+    disp('----------------------------------');
+    disp('----------------------------------');
+
+    tof_upsampled_prc = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrc/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
+    tof_upsampled_seg = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrcSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
     if forceThis || ~exist(tof_upsampled_seg,'file')
         vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,3);
     end
     % Reduce precision and decompress
-    tofSegList{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    tofSegList2{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    if forceThis || ~exist(tofSegList2{i},'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = '--out_data_type uchar \';
+        cmd{end+1} = [tof_upsampled_seg ' \'];
+        cmd{end+1} = tofSegList2{i};
+        system(strjoin(cmd,newline),'-echo');
+    end
+    % Archive
+    arxvFile = strsplit(tofSegList2{i}, '/'); arxvFile = fullfile(arxvDir,[arxvFile{end-1} '.nii.gz']);
+    if arxvThis || ~exist(arxvFile,'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = [tofSegList2{i} ' \'];
+        cmd{end+1} = arxvFile;
+        system(strjoin(cmd,newline),'-echo');
+    end
+end
+tofSegList1
+tofSegList2
+
+return
+
+forceThis = 1;
+arxvThis  = 1;
+usList = [1 2 3 4 6 8];
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Vesselboost on cropped -> bias-field-corrected -> denoised -> upsampled tof
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tofSegList3 = cell(length(usList), 1);
+for i = 1:length(usList)
+    % Upsample previously cropped, bias-field-corrected and denoised tof
+    I1 = usList(i); 
+    if I1==1; continue; end
+
+    disp('-----------------------');
+    disp('-----------------------');
+    disp(['Upsampling preprocessed tof by ' num2str(I1) 'x...']);
+    disp('-----------------------');
+    disp('-----------------------');
+    tof_prc       = replace(tof, '/data/tof/',  '/tmp/tofUps1xPrc/'               );
+    tof_upsampled = replace(tof, '/data/tof/', ['/tmp/tofPrcUps' num2str(I1) 'x/']);
+    if ~exist(fileparts(tof_upsampled),'dir'); mkdir(fileparts(tof_upsampled)); end
+    if forceThis || ~exist(tof_upsampled,'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = '--resample_type cubic \';
+        cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
+        cmd{end+1} = [tof_prc ' \'];
+        cmd{end+1} = [tof_upsampled];
+        system(strjoin(cmd,newline),'-echo');
+    end
+    
+    % Vesselboost
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Vesselboost on preprocessed then upsampled ' num2str(I1) 'x tof...']);
+    disp('----------------------------------');
+    disp('----------------------------------');
+
+    tof_upsampled_prc = replace(tof_upsampled, ['/tofPrcUps' num2str(I1) 'x/'], ['/tofPrcUps' num2str(I1) 'xDum/']); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
+    tof_upsampled_seg = replace(tof_upsampled, ['/tofPrcUps' num2str(I1) 'x/'], ['/tofPrcUps' num2str(I1) 'xSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
+    if forceThis || ~exist(tof_upsampled_seg,'file')
+        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,4);
+    end
+    % Reduce precision and decompress
+    tofSegList3{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
     cmd = {src.fs};
     cmd{end+1} = 'mri_convert \';
     cmd{end+1} = '--out_data_type uchar \';
     cmd{end+1} = [tof_upsampled_seg ' \'];
-    cmd{end+1} = tofSegList{i};
+    cmd{end+1} = tofSegList3{i};
     system(strjoin(cmd,newline),'-echo');
+    % Archive
+    arxvFile = strsplit(tofSegList3{i}, '/'); arxvFile = fullfile(arxvDir,[arxvFile{end-1} '.nii.gz']);
+    if arxvThis
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = [tofSegList3{i} ' \'];
+        cmd{end+1} = arxvFile;
+        system(strjoin(cmd,newline),'-echo');
+    end
 end
-tofSegList
+tofSegList3
+
 
 
 return
