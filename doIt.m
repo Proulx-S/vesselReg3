@@ -177,8 +177,6 @@ for i = 1:length(usList)
         cropSize = [range(dim2)+1 range(dim1)+1 range(dim3)+1].*I1;    
         cmd{end+1} = ['--crop '     strjoin(arrayfun(@num2str, cropCenter, 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = ['--cropsize ' strjoin(arrayfun(@num2str, cropSize  , 'UniformOutput', false), ' ') ' \'];
-        % cmd{end+1} = ['--crop ' num2str(200*I1) ' ' num2str(200*I1) ' 0 \'];
-        % cmd{end+1} = ['--cropsize ' num2str(300*I1) ' ' num2str(300*I1) ' ' num2str(36*I1) ' \'];
         if I1~=1
             cmd{end+1} = ['--resample_type cubic \'];
             cmd{end+1} = ['--upsample ' num2str(I1) ' \'];
@@ -195,14 +193,13 @@ for i = 1:length(usList)
     disp('----------------------------------');
     disp('----------------------------------');
 
-    tof_upsampled_prc = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'x/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
-    tof_upsampled_seg = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
-    if forceThis || ~exist(tof_upsampled_seg,'file')
-        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,4);
-    end
-    % Reduce precision and decompress
-    tofSegList1{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    tof_upsampled_prc = replace(tof_upsampled    , ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'x/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
+    tof_upsampled_seg = replace(tof_upsampled    , ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
+    tofSegList1{i}    = replace(tof_upsampled_seg, '.nii.gz'                   , '.nii'                         );
     if forceThis || ~exist(tofSegList1{i},'file')
+        % Run vesselboost
+        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,4);
+        % Reduce precision and decompress
         cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = '--out_data_type uchar \';
@@ -212,7 +209,7 @@ for i = 1:length(usList)
     end
     % Archive
     arxvFile = strsplit(tofSegList1{i}, '/'); arxvFile = fullfile(arxvDir,[arxvFile{end-1} '.nii.gz']);
-    if arxvThis || ~exist(arxvFile,'file')
+    if arxvThis
         cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = [tofSegList1{i} ' \'];
@@ -227,14 +224,13 @@ for i = 1:length(usList)
     disp('----------------------------------');
     disp('----------------------------------');
 
-    tof_upsampled_prc = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrc/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
-    tof_upsampled_seg = replace(tof_upsampled, ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrcSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
-    if forceThis || ~exist(tof_upsampled_seg,'file')
-        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,3);
-    end
-    % Reduce precision and decompress
-    tofSegList2{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    tof_upsampled_prc = replace(tof_upsampled    , ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrc/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
+    tof_upsampled_seg = replace(tof_upsampled    , ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrcSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
+    tofSegList2{i}    = replace(tof_upsampled_seg, '.nii.gz'                   , '.nii'                            );
     if forceThis || ~exist(tofSegList2{i},'file')
+        % Run vesselboost
+        vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,3);
+        % Reduce precision and decompress
         cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = '--out_data_type uchar \';
@@ -244,7 +240,7 @@ for i = 1:length(usList)
     end
     % Archive
     arxvFile = strsplit(tofSegList2{i}, '/'); arxvFile = fullfile(arxvDir,[arxvFile{end-1} '.nii.gz']);
-    if arxvThis || ~exist(arxvFile,'file')
+    if arxvThis
         cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = [tofSegList2{i} ' \'];
@@ -252,13 +248,13 @@ for i = 1:length(usList)
         system(strjoin(cmd,newline),'-echo');
     end
 end
-tofSegList1
-tofSegList2
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+disp(tofSegList1)
+disp(tofSegList2)
 
-return
 
-forceThis = 1;
-arxvThis  = 1;
+forceThis = 0;
+arxvThis  = 0;
 usList = [1 2 3 4 6 8];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost on cropped -> bias-field-corrected -> denoised -> upsampled tof
@@ -296,17 +292,19 @@ for i = 1:length(usList)
 
     tof_upsampled_prc = replace(tof_upsampled, ['/tofPrcUps' num2str(I1) 'x/'], ['/tofPrcUps' num2str(I1) 'xDum/']); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
     tof_upsampled_seg = replace(tof_upsampled, ['/tofPrcUps' num2str(I1) 'x/'], ['/tofPrcUps' num2str(I1) 'xSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
-    if forceThis || ~exist(tof_upsampled_seg,'file')
+    tofSegList3{i}    = replace(tof_upsampled_seg, '.nii.gz', '.nii');
+    if forceThis || ~exist(tofSegList3{i},'file')
+        % Run vesselboost
         vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,4);
+        % Reduce precision and decompress
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = '--out_data_type uchar \';
+        cmd{end+1} = [tof_upsampled_seg ' \'];
+        cmd{end+1} = tofSegList3{i};
+        system(strjoin(cmd,newline),'-echo');
     end
-    % Reduce precision and decompress
-    tofSegList3{i} = replace(tof_upsampled_seg, '.nii.gz', '.nii');
-    cmd = {src.fs};
-    cmd{end+1} = 'mri_convert \';
-    cmd{end+1} = '--out_data_type uchar \';
-    cmd{end+1} = [tof_upsampled_seg ' \'];
-    cmd{end+1} = tofSegList3{i};
-    system(strjoin(cmd,newline),'-echo');
+
     % Archive
     arxvFile = strsplit(tofSegList3{i}, '/'); arxvFile = fullfile(arxvDir,[arxvFile{end-1} '.nii.gz']);
     if arxvThis
@@ -317,11 +315,130 @@ for i = 1:length(usList)
         system(strjoin(cmd,newline),'-echo');
     end
 end
-tofSegList3
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+disp(tofSegList3)
 
+
+
+forceThis = 1;
+arxvThis  = 1;
+%%%%%%%%%%%%%%%%%%%%%%%%
+%% Individualize vessels
+%%%%%%%%%%%%%%%%%%%%%%%%
+% find connected components (vessels)
+mriSeg     = MRIread(tofSegList2{1});
+mriSeg.vol = logical(mriSeg.vol);
+mriTof     = MRIread(replace(tofSegList2{1},'Seg/tof.nii','/tof.nii.gz'));
+mriLabels  = mriSeg;
+mriLabels.fspec = replace(mriSeg.fspec,'/tof.nii','/tofLabels1.nii');
+if forceThis || ~exist(mriLabels.fspec,'file')
+    CC = bwconncomp(mriSeg.vol,26);
+    % sort vessels from big to small vessel network volume
+    [~,b] = sort(cellfun('length',CC.PixelIdxList),'descend');
+    CC.PixelIdxList = CC.PixelIdxList(b);
+    % label indivudal vessels in a single map for visualization
+    mriLabels.vol = zeros(size(mriSeg.vol));
+    for v = 1:length(CC.PixelIdxList)
+        mriLabels.vol(CC.PixelIdxList{v}) = v;
+    end
+    MRIwrite(mriLabels, mriLabels.fspec);
+else
+    mriLabels = MRIread(mriLabels.fspec);
+end
+% visualize vessel labels
+cmd = {src.fs};
+cmd{end+1} = 'freeview \';
+cmd{end+1} = ['-v ' mriSeg.fspec ':resample=nearest \'];
+cmd{end+1} = ['-v ' mriTof.fspec ':resample=nearest \'];
+cmd{end+1} = ['-v ' vfMRI ':resample=nearest \'];
+cmd{end+1} = ['-v ' mriLabels.fspec ':resample=nearest'];
+disp(strjoin(cmd,newline));
+% select vessels
+vesselIdx = sort([34 18 7 8 25 22 6 17 14 16 80 19 10 13 33 21 11 15]); %1->supuriously connected to the sagittal sinus
+% rewrite labels with only selected vessels
+mriLabels.fspec = replace(mriLabels.fspec, 'tofLabels1.nii', 'tofLabels2.nii');
+if forceThis || ~exist(mriLabels.fspec,'file')
+    mriLabels.vol(~ismember(mriLabels.vol,vesselIdx)) = 0;
+    MRIwrite(mriLabels, mriLabels.fspec);
+else
+    mriLabels = MRIread(mriLabels.fspec);
+end
+% write mask for each selected vessel
+clear vessels
+for v = 1:length(vesselIdx)
+    vessels(v).fname = replace(mriLabels.fspec, 'tofLabels2.nii', ['tofVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
+    % create mask
+    mri = MRIread(mriLabels.fspec);
+    mri.vol = mri.vol==vesselIdx(v);
+    mri.fspec = vessels(v).fname;
+    % find bounding box
+    [dim1, dim2, dim3] = ind2sub(size(mri.vol), find(mri.vol));
+    dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1; dim1(dim1>size(mriLabels.vol,1)) = size(mriLabels.vol,1);
+    dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1; dim2(dim2>size(mriLabels.vol,2)) = size(mriLabels.vol,2);
+    dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1; dim3(dim3>size(mriLabels.vol,3)) = size(mriLabels.vol,3);
+    if mod(mean(dim1),1); if dim1(1) ~= 1; dim1(1) = dim1(1) - 1; else; dim1(2) = dim1(2) + 1; end; end
+    if mod(mean(dim2),1); if dim2(1) ~= 1; dim2(1) = dim2(1) - 1; else; dim2(2) = dim2(2) + 1; end; end
+    if mod(mean(dim3),1); if dim3(1) ~= 1; dim3(1) = dim3(1) - 1; else; dim3(2) = dim3(2) + 1; end; end
+    vessels(v).dim1 = dim1;
+    vessels(v).dim2 = dim2;
+    vessels(v).dim3 = dim3;
+    % crop mask
+    if forceThis || ~exist(vessels(v).fname,'file')
+        MRIwrite(mri, mri.fspec);
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cropCenter = [mean(dim2) mean(dim1) 0];
+        cropSize = [range(dim2)+1 range(dim1)+1 range(dim3)+1];
+        cmd{end+1} = ['--crop '     strjoin(arrayfun(@num2str, cropCenter-1, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize ' strjoin(arrayfun(@num2str, cropSize  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, dim3-1, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = [vessels(v).fname ' \'];
+        cmd{end+1} = [vessels(v).fname];
+        system(strjoin(cmd,newline),'-echo');
+    end
+    % confirm proper cropping
+    if 0
+        mri1 = MRIread(vessels(v).fname);
+        mri1.vol = mri.vol(dim1(1):dim1(2), dim2(1):dim2(2), dim3(1):dim3(2));
+        mri1.fspec = replace(vessels(v).fname, '.nii', 'X.nii');
+        MRIwrite(mri1, mri1.fspec);
+        mri2 = MRIread(vessels(v).fname);
+        size(mri1.vol)
+        size(mri2.vol)
+        max(abs(mri1.vol(:) - mri2.vol(:)))/max(abs([mri1.vol(:); mri2.vol(:)]))*100
+        cmd = {src.fs};
+        cmd{end+1} = 'freeview \';
+        cmd{end+1} = [mriTof.fspec ' \'];
+        cmd{end+1} = [mri1.fspec ' \'];
+        cmd{end+1} = [mri2.fspec];
+        disp(strjoin(cmd,newline));
+    end
+    % archive
+    arxvFile = strsplit(vessels(v).fname, '/'); arxvFile = fullfile(arxvDir,arxvFile{end}); arxvFile = replace(arxvFile, '.nii', '.nii.gz');
+    if arxvThis
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = [vessels(v).fname ' \'];
+        cmd{end+1} = arxvFile;
+        system(strjoin(cmd,newline),'-echo');
+    end
+end
+%% %%%%%%%%%%%%%%%%%%%%%
+disp(vessels)
 
 
 return
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -345,7 +462,20 @@ tof = tof_upsampled;
 
 
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tofSegList1
+tofSegList2
+tofSegList3
+
+
+
+
+return
+
+
+
+
 
 
 % Skullstrip (extract the brain) using FreeSurfer's machine learning approach: mri_synthstrip
