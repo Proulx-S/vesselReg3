@@ -103,32 +103,31 @@ disp(projectScratch)
 S=2; arxvDir = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none';
 dir(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer*.mat']))
 
-load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260124221424.mat']));
+load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260125135452.mat']));
 %% %%%%%%%%%%%%%%%%
 
-
+return
 
 
 %%%%%%%%%%%%%%
 %% Get vessels
 %%%%%%%%%%%%%%
 vessels = info.vessel.pointer;
-% Read tof
-dir(info.project.scratch)
-dir(fullfile(info.project.scratch,'tofUps1xPrc'))
-dir(fullfile(info.subject.rxiv))
-mriTof = MRIread(fullfile(info.project.scratch,'tofUps1xPrc','tof.nii.gz'));
-% % Read vfMRI
-% mriVfMRI = MRIread(fullfile(info.project.scratch,'data','vfMRI','vfMRI.nii.gz'));
+% % Read tof
+% dir(info.project.scratch)
+% dir(fullfile(info.project.scratch,'tofUps1xPrc'))
+% dir(fullfile(info.subject.rxiv))
+% mriTof = MRIread(fullfile(info.project.scratch,'tofUps1xPrc','tof.nii.gz'));
+% % % Read vfMRI
+% % mriVfMRI = MRIread(fullfile(info.project.scratch,'data','vfMRI','vfMRI.nii.gz'));
 
 return
 
 for v = 1:length(vessels)
     % Read vessel mask
     clear mri
-    for p = 1:length(vessels(v).fMaskVessel)
-        mri(p) = MRIread(vessels(v).fMaskVessel{p});
-        nnz(mri(p).vol(:))/numel(mri(p).vol)
+    for p = 1:2%length(vessels(v).fSeg)
+        mri(p) = MRIread(vessels(v).fSeg{p});
     end
     mriVessel = mri(1);
     mriVessel.vol   = cat(5,mri.vol);
