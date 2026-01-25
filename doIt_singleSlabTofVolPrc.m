@@ -158,6 +158,8 @@ usList = [1 2 3 4 6 8];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost on cropped -> upsampled -> bias-field-corrected -> denoised tof
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tofList1 = cell(length(usList), 1);
+tofList2 = cell(length(usList), 1);
 tofSegList1 = cell(length(usList), 1);
 tofSegList2 = cell(length(usList), 1);
 for i = 1:length(usList)
@@ -169,6 +171,7 @@ for i = 1:length(usList)
     disp('-----------------------');
     disp('-----------------------');
     tof_upsampled = replace(tof, '/data/tof/', ['/tmp/tofUps' num2str(I1) 'x/']);
+    tofList1{i} = tof_upsampled;
     if ~exist(fileparts(tof_upsampled),'dir'); mkdir(fileparts(tof_upsampled)); end
     mri = MRIread(tofBrain);
     [dim1, dim2, dim3] = ind2sub(size(mri.vol), find(mri.vol > 0));
@@ -232,6 +235,7 @@ for i = 1:length(usList)
     tof_upsampled_prc = replace(tof_upsampled    , ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrc/'   ]); if ~exist(fileparts(tof_upsampled_prc),'dir'); mkdir(fileparts(tof_upsampled_prc)); end
     tof_upsampled_seg = replace(tof_upsampled    , ['/tofUps' num2str(I1) 'x/'], ['/tofUps' num2str(I1) 'xPrcSeg/']); if ~exist(fileparts(tof_upsampled_seg),'dir'); mkdir(fileparts(tof_upsampled_seg)); end
     tofSegList2{i}    = replace(tof_upsampled_seg, '.nii.gz'                   , '.nii'                            );
+    tofList2{i}       = tof_upsampled_prc;
     if forceThis || ~exist(tofSegList2{i},'file')
         % Run vesselboost
         vesselboost_prediction(fileparts(tof_upsampled),fileparts(tof_upsampled_seg),fileparts(tof_upsampled_prc),vesselBoostModel,3);
@@ -254,6 +258,8 @@ for i = 1:length(usList)
     end
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+disp(tofList1)
+disp(tofList2)
 disp(tofSegList1)
 disp(tofSegList2)
 
@@ -264,6 +270,7 @@ usList = [1 2 3 4 6 8];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost on cropped -> bias-field-corrected -> denoised -> upsampled tof
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tofList3    = cell(length(usList), 1);
 tofSegList3 = cell(length(usList), 1);
 for i = 1:length(usList)
     % Upsample previously cropped, bias-field-corrected and denoised tof
@@ -277,6 +284,7 @@ for i = 1:length(usList)
     disp('-----------------------');
     tof_prc       = replace(tof, '/data/tof/',  '/tmp/tofUps1xPrc/'               );
     tof_upsampled = replace(tof, '/data/tof/', ['/tmp/tofPrcUps' num2str(I1) 'x/']);
+    tofList3{i} = tof_upsampled;
     if ~exist(fileparts(tof_upsampled),'dir'); mkdir(fileparts(tof_upsampled)); end
     if forceThis || ~exist(tof_upsampled,'file')
         cmd = {src.fs};
@@ -321,6 +329,7 @@ for i = 1:length(usList)
     end
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+disp(tofList3)
 disp(tofSegList3)
 
 
@@ -330,7 +339,7 @@ rxivThis  = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Individualize vessels
 %%%%%%%%%%%%%%%%%%%%%%%%
-% find connected components (vessels)
+% find connected components (vessels) based on segmentation from non-upsampled but preprocessed tof
 mriSeg     = MRIread(tofSegList2{1});
 mriSeg.vol = logical(mriSeg.vol);
 mriTof     = MRIread(replace(tofSegList2{1},'Seg/tof.nii','/tof.nii.gz'));
@@ -368,70 +377,93 @@ if forceThis || ~exist(mriLabels.fspec,'file')
 else
     mriLabels = MRIread(mriLabels.fspec);
 end
-% write mask for each selected vessel
+% split into individual vessels
+tofList = cat(1,...
+tofList1(~cellfun('isempty',tofList1)),...
+tofList2(~cellfun('isempty',tofList2)),...
+tofList3(~cellfun('isempty',tofList3)));
 tofSegList = cat(1,...
 tofSegList1(~cellfun('isempty',tofSegList1)),...
 tofSegList2(~cellfun('isempty',tofSegList2)),...
 tofSegList3(~cellfun('isempty',tofSegList3)));
 clear vessels
 for v = 1:length(vesselIdx)
-    vessels(v).label  = vesselIdx(v);
-    vessels(v).fLabel = mriLabels.fspec;
-    vessels(v).fTof   = mriTof.fspec;
+    cmd = {src.fs};
+    vessels(v).label    = vesselIdx(v);
+    vessels(v).fLabel   = mriLabels.fspec;
+    vessels(v).fTof     = mriTof.fspec;
+    vessels(v).fTofList = tofList;
+    vessels(v).fSegList = tofSegList;
     % find bounding box
     mri = mriLabels;
     mri.vol = mri.vol==vesselIdx(v);
     [dim1, dim2, dim3] = ind2sub(size(mri.vol), find(mri.vol));
-    dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1; dim1(dim1>size(mri.vol,1)) = size(mri.vol,1);
-    dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1; dim2(dim2>size(mri.vol,2)) = size(mri.vol,2);
-    dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1; dim3(dim3>size(mri.vol,3)) = size(mri.vol,3);
+    dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1;
+    dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1;
+    dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1;
+    dim1(dim1>size(mri.vol,1)) = size(mri.vol,1);
+    dim2(dim2>size(mri.vol,2)) = size(mri.vol,2);
+    dim3(dim3>size(mri.vol,3)) = size(mri.vol,3);
     if mod(mean(dim1),1); if dim1(1) ~= 1; dim1(1) = dim1(1) - 1; else; dim1(2) = dim1(2) + 1; end; end
     if mod(mean(dim2),1); if dim2(1) ~= 1; dim2(1) = dim2(1) - 1; else; dim2(2) = dim2(2) + 1; end; end
     if mod(mean(dim3),1); if dim3(1) ~= 1; dim3(1) = dim3(1) - 1; else; dim3(2) = dim3(2) + 1; end; end
-    vessels(v).dim1 = dim1;
-    vessels(v).dim2 = dim2;
-    vessels(v).dim3 = dim3;
-    cropCenter = [ mean(dim2)    mean(dim1)            0   ];
-    cropSize   = [range(dim2)+1 range(dim1)+1 range(dim3)+1];
-    % crop tof
-    vessels(v).fTofVessel   = replace(mriTof.fspec, '.nii', ['Vessel' sprintf('%02d',vesselIdx(v)) '.nii']);
-    cmd = {src.fs};
-    if forceThis || ~exist(vessels(v).fTofVessel,'file')
-        cmd{end+1} = 'mri_convert \';
-        cmd{end+1} = ['--crop '     strjoin(arrayfun(@num2str, cropCenter-1, 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = ['--cropsize ' strjoin(arrayfun(@num2str, cropSize  , 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, dim3-1, 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = [vessels(v).fTof ' \'];
-        cmd{end+1} = [vessels(v).fTofVessel];
+    % find bounding box for upsampled versions and store them
+    mri.vol = false(size(mri.vol));
+    mri.vol(dim1(1):dim1(2), dim2(1):dim2(2), dim3(1):dim3(2)) = true;
+    mriX = mri;
+    for i = 1:length(usList)
+        mriX.vol = imresize3(mri.vol, usList(i),'nearest');
+        [dim1, dim2, dim3] = ind2sub(size(mriX.vol), find(mriX.vol));
+        dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1;
+        dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1;
+        dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1;
+        dim1(dim1>size(mriX.vol,1)) = size(mriX.vol,1);
+        dim2(dim2>size(mriX.vol,2)) = size(mriX.vol,2);
+        dim3(dim3>size(mriX.vol,3)) = size(mriX.vol,3);
+        if mod(mean(dim1),1); if dim1(1) ~= 1; dim1(1) = dim1(1) - 1; else; dim1(2) = dim1(2) + 1; end; end
+        if mod(mean(dim2),1); if dim2(1) ~= 1; dim2(1) = dim2(1) - 1; else; dim2(2) = dim2(2) + 1; end; end
+        if mod(mean(dim3),1); if dim3(1) ~= 1; dim3(1) = dim3(1) - 1; else; dim3(2) = dim3(2) + 1; end; end
+        vessels(v).dim1{i} = dim1;
+        vessels(v).dim2{i} = dim2;
+        vessels(v).dim3{i} = dim3;
+        vessels(v).cropCenter{i} = [ mean(dim2)  mean(dim1)          1 ]-1;
+        vessels(v).cropSize{i}   = [range(dim2) range(dim1) range(dim3)]+1;
+        vessels(v).usList(i) = usList(i);
     end
     % crop labels
-    vessels(v).fLabelVessel = replace(vessels(v).fLabel, 'tofLabels2.nii', ['labelVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
-    if forceThis || ~exist(vessels(v).fLabelVessel{p},'file')
+    vessels(v).fLabelCrop = replace(vessels(v).fLabel, 'tofLabels2.nii', ['labelVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
+    usIdx = find(vessels(v).usList==1);
+    if forceThis || ~exist(vessels(v).fLabelCrop,'file')
         cmd{end+1} = 'mri_convert \';
-        cmd{end+1} = ['--like ' vessels(v).fTofVessel ' \'];
+        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropCenter{usIdx}, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropSize{usIdx}  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, vessels(v).dim3{usIdx}-1    , 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = [vessels(v).fLabel ' \'];
-        cmd{end+1} =  vessels(v).fLabelVessel;
+        cmd{end+1} =  vessels(v).fLabelCrop;
     end
-    % crop labal and vessel masks
-    for p = 1:length(tofSegList)
-        vessels(v).fMaskVessel{p}  = replace(tofSegList{p}, 'tof.nii', ['segVessel'   sprintf('%02d',vesselIdx(v)) '.nii']);
-        if forceThis || ~exist(vessels(v).fMaskVessel{p},'file')
-            % write cropped single vessel mask
-            cmd{end+1} = 'mri_convert \';
-            cmd{end+1} = ['--like ' vessels(v).fTofVessel ' \'];
-            cmd{end+1} = [tofSegList{p} ' \'];
-            cmd{end+1} = vessels(v).fMaskVessel{p};
-        end
+    % crop everything else
+    for p = 1:length(vessels(v).fSegList)
+        % find which upsampled version
+        usIdx = strsplit(vessels(v).fSegList{p},'Ups'); usIdx = strsplit(usIdx{end},'x'); usIdx = str2num(usIdx{1}); usIdx = find(vessels(v).usList == usIdx);
+        % crop seg
+        in = vessels(v).fSegList{p};
+        vessels(v).fSegList{p} = replace(in, 'tof.nii', ['segVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropCenter{usIdx}, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropSize{usIdx}  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, vessels(v).dim3{usIdx}-1    , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = [in ' \'];
+        cmd{end+1} = [vessels(v).fSegList{p}];
+        %crop tof
+        in = vessels(v).fTofList{p};
+        vessels(v).fTofList{p} = replace(in, 'tof.nii', ['tofVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropCenter{usIdx}, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropSize{usIdx}  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, vessels(v).dim3{usIdx}-1    , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = [in ' \'];
+        cmd{end+1} = [vessels(v).fTofList{p}];
     end
-    % % archive
-    % rxivFile = strsplit(vessels(v).fLabel, '/'); rxivFile = fullfile(rxivDir,rxivFile{end}); rxivFile = replace(rxivFile, '.nii', '.nii.gz');
-    % if rxivThis
-    %     cmd = {src.fs};
-    %     cmd{end+1} = 'mri_convert \';
-    %     cmd{end+1} = [vessels(v).fLabel ' \'];
-    %     cmd{end+1} = rxivFile;
-    %     system(strjoin(cmd,newline),'-echo');
-    % end
     tic;
     disp('----------------------------------');
     disp('----------------------------------');
