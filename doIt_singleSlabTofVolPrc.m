@@ -375,8 +375,9 @@ tofSegList2(~cellfun('isempty',tofSegList2)),...
 tofSegList3(~cellfun('isempty',tofSegList3)));
 clear vessels
 for v = 1:length(vesselIdx)
-    vessels(v).fLabel       = mriLabels.fspec;
-    vessels(v).fTof         = mriTof.fspec;
+    vessels(v).label  = vesselIdx(v);
+    vessels(v).fLabel = mriLabels.fspec;
+    vessels(v).fTof   = mriTof.fspec;
     % find bounding box
     mri = mriLabels;
     mri.vol = mri.vol==vesselIdx(v);
@@ -390,36 +391,36 @@ for v = 1:length(vesselIdx)
     vessels(v).dim1 = dim1;
     vessels(v).dim2 = dim2;
     vessels(v).dim3 = dim3;
-    cropCenter = [mean(dim2) mean(dim1) 0];
-    cropSize = [range(dim2)+1 range(dim1)+1 range(dim3)+1];
+    cropCenter = [ mean(dim2)    mean(dim1)            0   ];
+    cropSize   = [range(dim2)+1 range(dim1)+1 range(dim3)+1];
     % crop tof
     vessels(v).fTofVessel   = replace(mriTof.fspec, '.nii', ['Vessel' sprintf('%02d',vesselIdx(v)) '.nii']);
+    cmd = {src.fs};
     if forceThis || ~exist(vessels(v).fTofVessel,'file')
-        cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = ['--crop '     strjoin(arrayfun(@num2str, cropCenter-1, 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = ['--cropsize ' strjoin(arrayfun(@num2str, cropSize  , 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, dim3-1, 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = [vessels(v).fTof ' \'];
         cmd{end+1} = [vessels(v).fTofVessel];
-        system(strjoin(cmd,newline),'-echo');
     end
-    % crop vessel mask
+    % crop labels
+    vessels(v).fLabelVessel = replace(vessels(v).fLabel, 'tofLabels2.nii', ['labelVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
+    if forceThis || ~exist(vessels(v).fLabelVessel{p},'file')
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = ['--like ' vessels(v).fTofVessel ' \'];
+        cmd{end+1} = [vessels(v).fLabel ' \'];
+        cmd{end+1} =  vessels(v).fLabelVessel;
+    end
+    % crop labal and vessel masks
     for p = 1:length(tofSegList)
-        vessels(v).fMaskVessel{p} = replace(tofSegList{p}, 'tof.nii', ['segVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
-        disp('-----------------------');
-        disp('-----------------------');
-        disp(['Cropping ' tofSegList{p} ' for vessel ' sprintf('%02d',vesselIdx(v)) '...']);
-        disp('-----------------------');
-        disp('-----------------------');
+        vessels(v).fMaskVessel{p}  = replace(tofSegList{p}, 'tof.nii', ['segVessel'   sprintf('%02d',vesselIdx(v)) '.nii']);
         if forceThis || ~exist(vessels(v).fMaskVessel{p},'file')
             % write cropped single vessel mask
-            cmd = {src.fs};
             cmd{end+1} = 'mri_convert \';
             cmd{end+1} = ['--like ' vessels(v).fTofVessel ' \'];
             cmd{end+1} = [tofSegList{p} ' \'];
             cmd{end+1} = vessels(v).fMaskVessel{p};
-            system(strjoin(cmd,newline),'-echo');
         end
     end
     % % archive
@@ -431,6 +432,19 @@ for v = 1:length(vesselIdx)
     %     cmd{end+1} = rxivFile;
     %     system(strjoin(cmd,newline),'-echo');
     % end
+    tic;
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Vessel ' sprintf('%02d',vesselIdx(v)) ' (' num2str(v) '/' num2str(length(vesselIdx)) ') writing...']);
+    disp('----------------------------------');
+    disp('----------------------------------');
+    system(strjoin(cmd,newline),'-echo');
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Vessel ' sprintf('%02d',vesselIdx(v)) ' (' num2str(v) '/' num2str(length(vesselIdx)) ') writing done...']);
+    toc;
+    disp('----------------------------------');
+    disp('----------------------------------');
 end
 %% %%%%%%%%%%%%%%%%%%%%%
 info.vessel.pointer = vessels;

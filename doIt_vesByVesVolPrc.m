@@ -103,10 +103,10 @@ disp(projectScratch)
 S=2; arxvDir = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none';
 dir(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer*.mat']))
 
-load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260124191024.mat']));
+load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260124221424.mat']));
 %% %%%%%%%%%%%%%%%%
 
-return
+
 
 
 %%%%%%%%%%%%%%
@@ -126,8 +126,8 @@ return
 for v = 1:length(vessels)
     % Read vessel mask
     clear mri
-    for p = 1:length(vessels(v).fList)
-        mri(p) = MRIread(vessels(v).fList{p});
+    for p = 1:length(vessels(v).fMaskVessel)
+        mri(p) = MRIread(vessels(v).fMaskVessel{p});
         nnz(mri(p).vol(:))/numel(mri(p).vol)
     end
     mriVessel = mri(1);
