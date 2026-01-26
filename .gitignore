@@ -1,5 +1,4 @@
 **/*.mat
+!doIt_singleSlabTofVolPrc/**/*.mat
 tmp/
 doIt_vesByVesVolPrc/
-#doIt_vesByVesVolPrc
-#doIt_vesByVesVolPrc/*
