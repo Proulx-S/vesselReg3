@@ -344,8 +344,8 @@ tofSegList3(~cellfun('isempty',tofSegList3)));
 
 
 
-forceThis = 1;
-rxivThis  = 1;
+forceThis = 0;
+rxivThis  = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Individualize vessels
 %%%%%%%%%%%%%%%%%%%%%%%%
@@ -459,46 +459,6 @@ for v = 1:length(vesselIdx)
         system(strjoin(cmd,newline),'-echo');
     end
     clear cmd;
-    
-    
-    
-    
-    %     % find bounding box for upsampled versions and store them
-    % mri.vol = false(size(mri.vol));
-    % mri.vol(dim1(1):dim1(2), dim2(1):dim2(2), dim3(1):dim3(2)) = true;
-    % mriX = mri;
-    % for i = 1:length(usList)
-    %     mriX.vol = imresize3(mri.vol, usList(i),'nearest');
-    %     [dim1, dim2, dim3] = ind2sub(size(mriX.vol), find(mriX.vol));
-    %     dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1;
-    %     dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1;
-    %     dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1;
-    %     dim1(dim1>size(mriX.vol,1)) = size(mriX.vol,1);
-    %     dim2(dim2>size(mriX.vol,2)) = size(mriX.vol,2);
-    %     dim3(dim3>size(mriX.vol,3)) = size(mriX.vol,3);
-    %     if mod(mean(dim1),1); if dim1(1) ~= 1; dim1(1) = dim1(1) - 1; else; dim1(2) = dim1(2) + 1; end; end
-    %     if mod(mean(dim2),1); if dim2(1) ~= 1; dim2(1) = dim2(1) - 1; else; dim2(2) = dim2(2) + 1; end; end
-    %     if mod(mean(dim3),1); if dim3(1) ~= 1; dim3(1) = dim3(1) - 1; else; dim3(2) = dim3(2) + 1; end; end
-    %     vessels(v).dim1{i} = dim1;
-    %     vessels(v).dim2{i} = dim2;
-    %     vessels(v).dim3{i} = dim3;
-    %     vessels(v).cropCenter{i} = [ mean(dim2)  mean(dim1)          1 ]-1;
-    %     vessels(v).cropSize{i}   = [range(dim2) range(dim1) range(dim3)]+1;
-    %     vessels(v).usList(i) = usList(i);
-    % end
-    % % crop labels
-    % vessels(v).fLabelCrop = replace(vessels(v).fLabel, 'tofLabels2.nii', ['labelVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
-    % usIdx = find(vessels(v).usList==1);
-    % if forceThis || ~exist(vessels(v).fLabelCrop,'file')
-    %     cmd{end+1} = 'mri_convert \';
-    %     cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropCenter{usIdx}, 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropSize{usIdx}  , 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, vessels(v).dim3{usIdx}-1    , 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = [vessels(v).fLabel ' \'];
-    %     cmd{end+1} =  vessels(v).fLabelCrop;
-    % end
-
-    
 
 
     cmd = {src.fs};
@@ -524,34 +484,6 @@ for v = 1:length(vesselIdx)
         cmd{end+1} = [in ' \'];
         cmd{end+1} = [vessels(v).fTof{p}];
     end
-
-
-
-
-
-    % % crop everything else
-    % for p = 1:length(vessels(v).fSegList)
-    %     % find which upsampled version
-    %     usIdx = strsplit(vessels(v).fSegList{p},'Ups'); usIdx = strsplit(usIdx{end},'x'); usIdx = str2num(usIdx{1}); usIdx = find(vessels(v).usList == usIdx);
-    %     % crop seg
-    %     in = vessels(v).fSegList{p};
-    %     vessels(v).fSegList{p} = replace(in, 'tof.nii', ['segVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
-    %     cmd{end+1} = 'mri_convert \';
-    %     cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropCenter{usIdx}, 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropSize{usIdx}  , 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, vessels(v).dim3{usIdx}-1    , 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = [in ' \'];
-    %     cmd{end+1} = [vessels(v).fSegList{p}];
-    %     %crop tof
-    %     in = vessels(v).fTofList{p};
-    %     vessels(v).fTofList{p} = replace(in, 'tof.nii', ['tofVessel' sprintf('%02d',vesselIdx(v)) '.nii']);
-    %     cmd{end+1} = 'mri_convert \';
-    %     cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropCenter{usIdx}, 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropSize{usIdx}  , 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = ['--slice-crop ' strjoin(arrayfun(@num2str, vessels(v).dim3{usIdx}-1    , 'UniformOutput', false), ' ') ' \'];
-    %     cmd{end+1} = [in ' \'];
-    %     cmd{end+1} = [vessels(v).fTofList{p}];
-    % end
 
 
     % run commands
