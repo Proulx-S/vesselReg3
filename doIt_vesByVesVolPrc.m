@@ -120,7 +120,7 @@ forceThis = 0;
 [~,prcLabel,~] = fileparts(fileparts(vessels(1).fSeg))
 prcInd = contains(prcLabel',{'tofPrcUps' 'tofUps1xPrc'});
 
-for v = 1:length(vessels)
+for v = 3%1:length(vessels)
     disp('----------------------------------');
     disp('----------------------------------');
     disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... computing']);
@@ -197,6 +197,21 @@ for v = 1:length(vessels)
         disp(['consensus segmentation... already done']);
     end
 
+    % Output vesselboost seg performed on tof at original scale
+    vessels(v).fSegScale1           = fullfile(projectCode,'result',['vessel-' sprintf('%02d',vLabel) '_scale-1.nii.gz']);
+    if ~exist(fileparts(vessels(v).fSegScale1          ),'dir'); mkdir(fileparts(vessels(v).fSegScale1          )); end
+    if forceThis || ~exist(vessels(v).fSegScale1,'file')
+        copyfile(fSegListCleaned{fSegList_usFactor == 1}, vessels(v).fSegScale1);
+    end
+    % Output vesselboost seg performed on tof at original scale then upsampled to match consensus segmentation
+    vessels(v).fSegScale1_upsampled = fullfile(projectCode,'result',['vessel-' sprintf('%02d',vLabel) '_scale-1Upsampled.nii.gz']);
+    if ~exist(fileparts(vessels(v).fSegScale1_upsampled),'dir'); mkdir(fileparts(vessels(v).fSegScale1_upsampled)); end
+    if forceThis || ~exist(vessels(v).fSegScale1_upsampled,'file')
+        copyfile(fSegListCleanedResampled{fSegList_usFactor == 1}, vessels(v).fSegScale1_upsampled);
+    end
+
+    
+
     disp('----------------------------------');
     disp('----------------------------------');
     disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... done']);
@@ -204,6 +219,28 @@ for v = 1:length(vessels)
     disp('----------------------------------');
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+return
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Compare single- to multi-scale
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% visualize vessels on vfMRI
+cmd = {src.fs};
+cmd{end+1} = 'freeview \';
+cmd{end+1} = ['-v ' vessels(v).ref.fTof ' \'];
+for v = 3%1:length(vessels)
+    cmd{end+1} = ['-v ' [vessels(v).fSegConsensus ':isosurface=1,255'] ' \'];
+    % cmd{end+1} = ['-v ' [vessels(v).fSegScale1 ':isosurface=1,255'] ' \'];
+    cmd{end+1} = ['-v ' [vessels(v).fSegScale1_upsampled ':isosurface=1,255'] ' \'];
+end
+cmd{end}(end-1:end) = [];
+disp(strjoin(cmd,newline));
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%
+return
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Visualize vessels on vfMRI
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % average vfMRI for visualization
 [vessels.fVfmri] = deal(fullfile(info.project.code,'tmp','vfMRImean.nii.gz'));
 if forceThis || ~exist(vessels(1).fVfmri,'file')
@@ -220,3 +257,5 @@ for v = 1:length(vessels)
 end
 cmd{end}(end-1:end) = [];
 disp(strjoin(cmd,newline));
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%
+
