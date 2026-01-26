@@ -470,19 +470,23 @@ for v = 1:length(vesselIdx)
         % seg
         in = tofSegList{p};
         vessels(v).fSeg{p} = fullfile(fileparts(in), ['vessel-' sprintf('%02d',vesselIdx(v)) '_seg.nii.gz']);
-        cmd{end+1} = 'mri_convert \';
-        cmd{end+1} = ['--resample_type nearest \'];
-        cmd{end+1} = ['--like ' vessels(v).cropRef.fMaskList{usIdx} ' \'];
-        cmd{end+1} = [in ' \'];
-        cmd{end+1} = [vessels(v).fSeg{p}];
+        if forceThis || ~exist(vessels(v).fSeg{p},'file')
+            cmd{end+1} = 'mri_convert \';
+            cmd{end+1} = ['--resample_type nearest \'];
+            cmd{end+1} = ['--like ' vessels(v).cropRef.fMaskList{usIdx} ' \'];
+            cmd{end+1} = [in ' \'];
+            cmd{end+1} = [vessels(v).fSeg{p}];
+        end
         % tof
         in = tofList{p};
         vessels(v).fTof{p} = fullfile(fileparts(in), ['vessel-' sprintf('%02d',vesselIdx(v)) '_tof.nii.gz']);
-        cmd{end+1} = 'mri_convert \';
-        cmd{end+1} = ['--resample_type nearest \'];
-        cmd{end+1} = ['--like ' vessels(v).cropRef.fMaskList{usIdx} ' \'];
-        cmd{end+1} = [in ' \'];
-        cmd{end+1} = [vessels(v).fTof{p}];
+        if forceThis || ~exist(vessels(v).fTof{p},'file')
+            cmd{end+1} = 'mri_convert \';
+            cmd{end+1} = ['--resample_type nearest \'];
+            cmd{end+1} = ['--like ' vessels(v).cropRef.fMaskList{usIdx} ' \'];
+            cmd{end+1} = [in ' \'];
+            cmd{end+1} = [vessels(v).fTof{p}];
+        end
     end
 
 
