@@ -113,7 +113,7 @@ vessels = info.vessel.pointer;
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute cross-scale consensus segmentation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -121,6 +121,11 @@ forceThis = 1;
 prcInd = contains(prcLabel',{'tofPrcUps' 'tofUps1xPrc'});
 
 for v = 1:length(vessels)
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... computing']);
+    disp('----------------------------------');
+    disp('----------------------------------');
     vLabel = vessels(v).label;
     fSegList          = vessels(v).fSeg(prcInd)';
     fSegList_usFactor = vessels(v).upsampleFactor(prcInd)';
@@ -133,10 +138,11 @@ for v = 1:length(vessels)
     fSegListCleaned = cell(length(fSegList),1);
     fSegListCleanedResampled = cell(length(fSegList),1);
     for p = 1:length(fSegList)
-        
+        disp(['scale' num2str(fSegList_usFactor(p)) ': ' num2str(p) '/' num2str(length(fSegList))]);
         % Exclude voxels from other vessels or not connected to the main vessel
         fSegListCleaned{p} = fullfile(scriptDir,['vessel-' sprintf('%02d',vLabel) '_scale-' num2str(fSegList_usFactor(p)) '_mask.nii.gz']);
         if forceThis || ~exist(fSegListCleaned{p},'file')
+            disp(['mask cleaning... computing']);
             mriRef = MRIread(usRefList{fSegList_usFactor(p)==usRefList_usFactor});
             mri    = MRIread(fSegList{p});
             CCRef = bwconncomp(mriRef.vol==vLabel,26);
@@ -152,11 +158,15 @@ for v = 1:length(vessels)
             eMask(CC.PixelIdxList{b}) = false;
             mri.vol(eMask) = 0;
             MRIwrite(mri, fSegListCleaned{p});
+            disp(['mask cleaning... done']);
+        else
+            disp(['mask cleaning... already done']);
         end
 
         % Upsample the cleaned mask to the highest resolution
         fSegListCleanedResampled{p} = fullfile(scriptDir,['vessel-' sprintf('%02d',vLabel) '_scale-' num2str(fSegList_usFactor(p)) '_maskUpsampled.nii.gz']);
         if forceThis || ~exist(fSegListCleanedResampled{p},'file')
+            disp(['mask upsampling... computing']);
             cmd = {src.fs};
             cmd{end+1} = 'mri_convert \';
             cmd{end+1} = ['--resample_type nearest \'];
@@ -164,12 +174,17 @@ for v = 1:length(vessels)
             cmd{end+1} = [fSegListCleaned{p} ' \'];
             cmd{end+1} = [fSegListCleanedResampled{p}];
             system(strjoin(cmd,newline),'-echo');
+            disp(['mask upsampling... done']);
+        else
+            disp(['mask upsampling... already done']);
         end
     end
 
     % Compute consensus segmentation across scales
-    vessels(v).fSegConsensus = fullfile(scriptDir,['vessel-' sprintf('%02d',vLabel) '_scale-consensus.nii.gz']);
+    vessels(v).fSegConsensus = fullfile(projectCode,'result',['vessel-' sprintf('%02d',vLabel) '_scale-consensus.nii.gz']);
+    if ~exist(fileparts(vessels(v).fSegConsensus),'dir'); mkdir(fileparts(vessels(v).fSegConsensus)); end
     if forceThis || ~exist(vessels(v).fSegConsensus,'file')
+        disp(['consensus segmentation... computing']);
         vessel = [];
         for p = 1:length(fSegListCleanedResampled)
             mri = MRIread(fSegListCleanedResampled{p});
@@ -177,10 +192,31 @@ for v = 1:length(vessels)
         end
         mri.vol = mean(vessel,5);
         MRIwrite(mri, vessels(v).fSegConsensus);
+        disp(['consensus segmentation... done']);
+    else
+        disp(['consensus segmentation... already done']);
     end
+
+    disp('----------------------------------');
+    disp('----------------------------------');
+    disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... done']);
+    disp('----------------------------------');
+    disp('----------------------------------');
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-disp(vessels(v).fSegConsensus)
-
-
-
+% average vfMRI for visualization
+[vessels.fVfmri] = deal(fullfile(info.project.code,'tmp','vfMRImean.nii.gz'));
+if forceThis || ~exist(vessels(1).fVfmri,'file')
+    mri = MRIread(fullfile(info.project.code,'data','vfMRI','vfMRI.nii.gz'));
+    mri.vol = mean(mri.vol,4);
+    MRIwrite(mri, vessels(1).ref.fVfmri);
+end
+% visualize vessels on vfMRI
+cmd = {src.fs};
+cmd{end+1} = 'freeview \';
+cmd{end+1} = ['-v ' vessels(v).fVfmri ' \'];
+for v = 1:length(vessels)
+    cmd{end+1} = ['-v ' [vessels(v).fSegConsensus ':isosurface=1,255'] ' \'];
+end
+cmd{end}(end-1:end) = [];
+disp(strjoin(cmd,newline));
