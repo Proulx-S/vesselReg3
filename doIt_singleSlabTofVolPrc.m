@@ -151,10 +151,10 @@ else
 end
 
 
-
+if 0
 forceThis = 0;
 rxivThis  = 0;
-usList = [1 2 3 4 6 8];
+usList = [1 2 4 8];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost on cropped -> upsampled -> bias-field-corrected -> denoised tof
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -262,11 +262,12 @@ disp(tofList1)
 disp(tofList2)
 disp(tofSegList1)
 disp(tofSegList2)
+end
 
-
+return
 forceThis = 0;
 rxivThis  = 0;
-usList = [1 2 3 4 6 8];
+usList = [1 2 4 8];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost on cropped -> bias-field-corrected -> denoised -> upsampled tof
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

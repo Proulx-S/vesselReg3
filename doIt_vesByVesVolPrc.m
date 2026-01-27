@@ -117,10 +117,13 @@ forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Compute cross-scale consensus segmentation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-[~,prcLabel,~] = fileparts(fileparts(vessels(1).fSeg))
-prcInd = contains(prcLabel',{'tofPrcUps' 'tofUps1xPrc'});
-
-for v = 3%1:length(vessels)
+% Choose what preproc (scale) to use for the consensus
+% cases with processing: bias-field-correction and denoising -> upsampling -> vesselboost
+prcInd = contains(fileparts(fileparts(vessels(1).fSeg))',{'tofPrcUps' 'tofUps1xPrc'});
+% cases with 2^n upsampling scale
+prcInd = prcInd & ismember(vessels(1).upsampleFactor,[1 2 4 8]);
+return
+for v = 1:length(vessels)
     disp('----------------------------------');
     disp('----------------------------------');
     disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... computing']);
@@ -190,7 +193,7 @@ for v = 3%1:length(vessels)
             mri = MRIread(fSegListCleanedResampled{p});
             vessel = cat(5,vessel,mri.vol);
         end
-        mri.vol = mean(vessel,5);
+        mri.vol = sum(vessel,5);
         MRIwrite(mri, vessels(v).fSegConsensus);
         disp(['consensus segmentation... done']);
     else
@@ -228,7 +231,7 @@ return
 cmd = {src.fs};
 cmd{end+1} = 'freeview \';
 cmd{end+1} = ['-v ' vessels(v).ref.fTof ' \'];
-for v = 3%1:length(vessels)
+for v = 1:length(vessels)
     cmd{end+1} = ['-v ' [vessels(v).fSegConsensus ':isosurface=1,255'] ' \'];
     % cmd{end+1} = ['-v ' [vessels(v).fSegScale1 ':isosurface=1,255'] ' \'];
     cmd{end+1} = ['-v ' [vessels(v).fSegScale1_upsampled ':isosurface=1,255'] ' \'];
