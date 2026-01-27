@@ -151,7 +151,7 @@ else
 end
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost -- on original resolution tof (with preprocessing)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -239,7 +239,6 @@ tofCropPrcSclSeg;
 
 
 
-
 forceThis = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Individualize vessels
@@ -288,13 +287,12 @@ end
 clear vessels
 for v = 1:length(vesselIdx)
     disp(' ')
-    disp('----------------------------------');
-    disp('----------------------------------');
+    disp('--------------------------------');
+    disp('--------------------------------');
     disp(['Vessel ' sprintf('%02d',vesselIdx(v)) ' (' num2str(v) '/' num2str(length(vesselIdx)) ') cropping out...']);
-    disp('----------------------------------');
-    disp('----------------------------------');
+    disp('---------------');
+    disp('---------------');
 
-    cmd = {src.fs};
     vessels(v).label      = vesselIdx(v);
     vessels(v).ref.fLabel = mriLabels.fspec;
     vessels(v).ref.fTof   = mriTof.fspec;
@@ -336,13 +334,15 @@ for v = 1:length(vesselIdx)
     vessels(v).cropRef.fMaskList = cell(1, length(vessels(v).cropRef.usList));
     vessels(v).fMaskList = cell(length(vessels(v).cropRef.usList), 1);
     for p = 1:length(vessels(v).cropRef.usList)
+        vessels(v).cropRef.resList{p}   = res./vessels(v).cropRef.usList(p);
+    end
+    for p = 1:length(vessels(v).cropRef.usList)
         disp(' ')
         disp(['---------------------------']);
         disp(['scale=' num2str(vessels(v).cropRef.usList(p)) ' (' num2str(p) '/' num2str(length(vessels(v).cropRef.usList)) ') processing...']);
         disp(['---------------------------']);
 
         % To obtain a reference grid (--like), upsample the vessel mask derived from original resolution data
-        vessels(v).cropRef.resList{p}   = res./vessels(v).cropRef.usList(p);
         vessels(v).cropRef.fMaskList{p} = replace(vessels(v).cropRef.fMask, 'mask.nii.gz', ['maskScale' num2str(usList(p)) '.nii.gz']);
         if forceThis || ~exist(vessels(v).cropRef.fMaskList{p},'file')
             cmd = {src.fs};
@@ -381,7 +381,7 @@ for v = 1:length(vesselIdx)
             MRIwrite(mri, vessels(v).fMaskList{p});
             % upsample to the highest scale
             [~,b] = max(vessels(v).cropRef.usList);
-            maxRes = vessels(v).cropRef.resList{b}
+            maxRes = vessels(v).cropRef.resList{b};
             if any(vessels(v).cropRef.resList{p}~=maxRes)
                 cmd = {src.fs};
                 cmd{end+1} = 'mri_convert \';
