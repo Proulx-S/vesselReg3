@@ -151,6 +151,7 @@ else
 end
 
 
+
 forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost -- on original resolution tof (with preprocessing)
@@ -195,8 +196,7 @@ tofCropPrcSeg;
 
 
 
-
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Multiscale Vesselboost -- on upsampled preprocessed tof (different scales)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -211,10 +211,10 @@ usList = [2 4 8];
 tofCropPrcScl    = cell(length(usList), 1);
 tofCropPrcSclSeg = cell(length(usList), 1);
 for i = 1:length(usList)
-    % Upsample (cubic interpolation) preprocessed tof
-    tofCropPrcScl{i} = replace(tofCropPrc, '/cropPrc/', ['/cropPrcScale' num2str(usList(i)) '/']);
+    tofCropPrcScl{i}    = replace(tofCropPrc, '/cropPrc/', ['/cropPrcScale' num2str(usList(i)) '/']);
     if ~exist(fileparts(tofCropPrcScl{i}),'dir'); mkdir(fileparts(tofCropPrcScl{i})); end
     if forceThis || ~exist(tofCropPrcScl{i},'file')
+        % Upsample (cubic interpolation) preprocessed tof
         cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), res./usList(i), 'UniformOutput', false), ' ') ' \'];
@@ -222,24 +222,109 @@ for i = 1:length(usList)
         cmd{end+1} = [tofCropPrc ' \'];
         cmd{end+1} = [tofCropPrcScl{i}];
         system(strjoin(cmd,newline),'-echo');
+    else
+        disp(['upsampling... already done']);
     end
-
     % Vesselboost
     tofCropPrcSclSeg{i} = replace(tofCropPrcScl{i},'/tof.nii.gz','/seg.nii.gz');
-    vesselboost_prediction(...
-        tofCropPrcScl{i}   ,...
-        tofCropPrcSclSeg{i},...
-        [],...
-        vesselBoostModel,4);
+    if ~exist(fileparts(tofCropPrcSclSeg{i}),'dir'); mkdir(fileparts(tofCropPrcSclSeg{i})); end
+    if forceThis || ~exist(tofCropPrcSclSeg{i},'file')
+        vesselboost_prediction(...
+            tofCropPrcScl{i}   ,...
+            tofCropPrcSclSeg{i},...
+            [],...
+            vesselBoostModel,4);
+    else
+        disp(['vesselboost... already done']);
+    end
 end
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-tofCropPrcScl;
-tofCropPrcSclSeg;
 
 
 
 
 forceThis = 1;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Multiscale Vesselboost -- consensus segmentation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Upsample segementation to highest resolution -- original-resolution-derived segmentation
+[~,b] = max(usList);
+maxRes = res./usList(b);
+upsampledSegList = cell(length(tofCropPrcSclSeg)+1,1);
+disp(['upsampling segmentation from scale=1 (original resolution) to the highest resolution... computing']);
+upsampledSegList{1} = replace(tofCropPrcSeg,'/seg.nii.gz','/segUpsampled.nii.gz');
+if ~exist(fileparts(upsampledSegList{1}),'dir'); mkdir(fileparts(upsampledSegList{1})); end
+if forceThis || ~exist(upsampledSegList{1},'file')
+    cmd = {src.fs};
+    cmd{end+1} = 'mri_convert \';
+    cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), maxRes, 'UniformOutput', false), ' ') ' \'];
+    cmd{end+1} = ['--resample_type nearest \'];
+    cmd{end+1} = ['--out_data_type ' 'uchar' ' \'];
+    cmd{end+1} = '--no_scale 1 \'; % don't scale data to 0-255 range
+    cmd{end+1} = [tofCropPrcSeg ' \'];
+    cmd{end+1} = [upsampledSegList{1}];
+    system(strjoin(cmd,newline),'-echo');
+    disp(['upsampling segmentation from scale=1 (original resolution) to the highest resolution... done']);
+else
+    disp(['upsampling segmentation from scale=1 (original resolution) to the highest resolution... already done']);
+end
+% Upsample segementation to highest resolution -- all-resolution-derived segmentation
+disp(['upsampling segmentation from resolutions (scale=' strjoin(arrayfun(@num2str, usList, 'UniformOutput', false), ',') ') to the highest resolution... computing']);
+for p = 1:length(tofCropPrcSclSeg)
+    disp(['scale=' num2str(usList(p)) '... computing']);
+    upsampledSegList{p+1} = replace(tofCropPrcSclSeg{p},'/seg.nii.gz','/segUpsampled.nii.gz');
+    if ~exist(fileparts(upsampledSegList{p+1}),'dir'); mkdir(fileparts(upsampledSegList{p+1})); end
+    if forceThis || ~exist(upsampledSegList{p+1},'file')
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        if usList(p)~=max(usList)
+            cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), maxRes, 'UniformOutput', false), ' ') ' \'];
+            cmd{end+1} = ['--resample_type nearest \'];
+        end
+        cmd{end+1} = ['--out_data_type ' 'uchar' ' \'];
+        cmd{end+1} = '--no_scale 1 \'; % don't scale data to 0-255 range
+        cmd{end+1} = [tofCropPrcSclSeg{p} ' \'];
+        cmd{end+1} = [upsampledSegList{p+1}];
+        system(strjoin(cmd,newline),'-echo');
+        disp(['scale=' num2str(usList(p)) '... done']);
+    else
+        disp(['scale=' num2str(usList(p)) '... already done']);
+    end
+end
+% Compute consensus segmentation (add all segmentations)
+consensusSeg = fullfile(projectCode,'result','scale-C_seg.nii.gz');
+if ~exist(fileparts(consensusSeg),'dir'); mkdir(fileparts(consensusSeg)); end
+disp(['computing consensus (sum) segmentation... computing']);
+if forceThis || ~exist(consensusSeg,'file')
+    copyfile(upsampledSegList{1},consensusSeg);
+    for p = 2:length(upsampledSegList)
+        disp(['adding scale=' num2str(usList(p)) ' to consensus segmentation... computing']);
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_concat \';
+        cmd{end+1} = [consensusSeg ' ' upsampledSegList{p} ' \'];
+        cmd{end+1} = ['-o ' consensusSeg];
+        cmd{end+1} = '--sum';
+        system(strjoin(cmd,newline),'-echo');
+        disp(['adding scale=' num2str(usList(p)) ' to consensus segmentation... done']);
+    end
+    disp(['computing consensus (sum) segmentation... done']);
+else
+    disp(['computing consensus (sum) segmentation... already done']);
+end
+% Output scale=1 for comparison
+scale1Seg = fullfile(projectCode,'result','scale-1_seg.nii.gz');
+if ~exist(fileparts(scale1Seg),'dir'); mkdir(fileparts(scale1Seg)); end
+if forceThis || ~exist(scale1Seg,'file')
+    copyfile(upsampledSegList{1},scale1Seg);
+end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+scale1Seg;
+consensusSeg;
+
+
+
+return
+
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Individualize vessels
 %%%%%%%%%%%%%%%%%%%%%%%%
@@ -408,7 +493,8 @@ end
 vessels;
 
 
-forceThis = 1;
+
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%
 %% Save vessel pointer
 %%%%%%%%%%%%%%%%%%%%%%
