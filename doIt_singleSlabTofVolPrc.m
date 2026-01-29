@@ -100,6 +100,7 @@ info.project.scratch = projectScratch;
 info.subject.rxiv    = rxivDir;
 info.subject.idx     = S;
 
+
 if 0
     %%%%%%%%%%%%%%%%%%
     %% Copy data files
@@ -189,7 +190,7 @@ if forceThis || ~exist(tofCropPrcSeg,'file') || ~exist(tofCropPrc,'file')
         tofCropPrc,...
         vesselBoostModel,3);
 end
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 tofCrop;
 tofCropPrc;
 tofCropPrcSeg;
@@ -238,6 +239,7 @@ for i = 1:length(usList)
         disp(['vesselboost... already done']);
     end
 end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
@@ -297,213 +299,195 @@ disp(['computing consensus (sum) segmentation... computing']);
 if forceThis || ~exist(consensusSeg,'file')
     copyfile(upsampledSegList{1},consensusSeg);
     for p = 2:length(upsampledSegList)
-        disp(['adding scale=' num2str(usList(p)) ' to consensus segmentation... computing']);
+        disp(['adding scale=' num2str(usList(p-1)) ' to consensus segmentation... computing']);
         cmd = {src.fs};
         cmd{end+1} = 'mri_concat \';
         cmd{end+1} = [consensusSeg ' ' upsampledSegList{p} ' \'];
-        cmd{end+1} = ['-o ' consensusSeg];
-        cmd{end+1} = '--sum';
+        cmd{end+1} = ['--o ' consensusSeg ' \'];
+        cmd{end+1} = '--sum --keep-datatype';
         system(strjoin(cmd,newline),'-echo');
-        disp(['adding scale=' num2str(usList(p)) ' to consensus segmentation... done']);
+        disp(['adding scale=' num2str(usList(p-1)) ' to consensus segmentation... done']);
     end
     disp(['computing consensus (sum) segmentation... done']);
 else
     disp(['computing consensus (sum) segmentation... already done']);
 end
-% Output scale=1 for comparison
+% Output scale=1 and scale=max to result directory for comparison
 scale1Seg = fullfile(projectCode,'result','scale-1_seg.nii.gz');
 if ~exist(fileparts(scale1Seg),'dir'); mkdir(fileparts(scale1Seg)); end
 if forceThis || ~exist(scale1Seg,'file')
     copyfile(upsampledSegList{1},scale1Seg);
 end
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+scale1Tof = fullfile(projectCode,'result','scale-1_tof.nii.gz');
+if ~exist(fileparts(scale1Tof),'dir'); mkdir(fileparts(scale1Tof)); end
+if forceThis || ~exist(scale1Seg,'file')
+    copyfile(tofCropPrc,scale1Tof);
+end
+scaleMaxSeg = fullfile(projectCode,'result',['scale-' num2str(max(usList)) '_seg.nii.gz']);
+if ~exist(fileparts(scaleMaxSeg),'dir'); mkdir(fileparts(scaleMaxSeg)); end
+if forceThis || ~exist(scaleMaxSeg,'file')
+    [~,b] = max(usList);
+    copyfile(upsampledSegList{b+1},scaleMaxSeg);
+end
+scaleMaxTof = fullfile(projectCode,'result',['scale-' num2str(max(usList)) '_tof.nii.gz']);
+if ~exist(fileparts(scaleMaxTof),'dir'); mkdir(fileparts(scaleMaxTof)); end
+if forceThis || ~exist(scaleMaxTof,'file')
+    [~,b] = max(usList);
+    copyfile(tofCropPrcScl{b},scaleMaxTof);
+end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 scale1Seg;
+scale1Tof;
+scaleMaxSeg;
+scaleMaxTof;
 consensusSeg;
 
 
 
-return
 
-forceThis = 0;
-%%%%%%%%%%%%%%%%%%%%%%%%
-%% Individualize vessels
-%%%%%%%%%%%%%%%%%%%%%%%%
-% find connected components (vessels) based on segmentation from non-upsampled but preprocessed tof
-mriSeg     = MRIread(tofCropPrcSeg);
-mriSeg.vol = logical(mriSeg.vol);
-mriTof     = MRIread(tofCropPrc);
-mriLabels  = mriSeg;
-mriLabels.fspec = replace(mriSeg.fspec,'/seg.nii.gz','/label.nii.gz');
-if forceThis || ~exist(mriLabels.fspec,'file')
-    CC = bwconncomp(mriSeg.vol,26);
-    % sort vessels from big to small vessel network volume
-    [~,b] = sort(cellfun('length',CC.PixelIdxList),'descend');
-    CC.PixelIdxList = CC.PixelIdxList(b);
-    % label indivudal vessels in a single map for visualization
-    mriLabels.vol = zeros(size(mriSeg.vol));
-    for v = 1:length(CC.PixelIdxList)
-        mriLabels.vol(CC.PixelIdxList{v}) = v;
-    end
-    MRIwrite(mriLabels, mriLabels.fspec);
-else
-    mriLabels = MRIread(mriLabels.fspec);
-end
-% visualize vessel labels
+
+%%%%%%%%%%%%%%%%%%%%
+%% Visualize results
+%%%%%%%%%%%%%%%%%%%%
 cmd = {src.fs};
 cmd{end+1} = 'freeview \';
-cmd{end+1} = ['-v ' mriSeg.fspec ':resample=nearest \'];
-cmd{end+1} = ['-v ' mriTof.fspec ':resample=nearest \'];
-cmd{end+1} = ['-v ' vfMRI ':resample=nearest \'];
-cmd{end+1} = ['-v ' mriLabels.fspec ':resample=nearest'];
-disp(strjoin(cmd,newline)); clear cmd;
-% select vessels
-vesselIdx = sort([34 18 7 8 25 22 6 17 14 16 80 19 10 13 33 21 11 15]); %1->supuriously connected to the sagittal sinus
-% rewrite labels with only selected vessels
-mriLabels.fspec = replace(mriLabels.fspec, 'label.nii.gz', 'selectedLabel.nii.gz');
-if forceThis || ~exist(mriLabels.fspec,'file')
-    mriLabels.vol(~ismember(mriLabels.vol,vesselIdx)) = 0;
-    MRIwrite(mriLabels, mriLabels.fspec);
+cmd{end+1} = ['-v ' scaleMaxTof                ' \'];
+cmd{end+1} = ['-v ' scale1Tof ':resample=nearest \'];
+cmd{end+1} = ['-v ' scaleMaxSeg  ':heatscale=0,1 \'];
+cmd{end+1} = ['-v ' scale1Seg    ':heatscale=0,1 \'];
+cmd{end+1} = ['-v ' consensusSeg ':heatscale=0,' num2str(length(usList)+1)];
+%% %%%%%%%%%%%%%%%%%
+disp(strjoin(cmd,newline));
+
+
+
+% Note: we might want to consider a more strict criteria (connectivity parameter for bwconncomp) to better separate vessels that are close to one another.
+forceThis = 1;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Create single-vessel segmentations/masks (cropped to vessel bounding box)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+fTof   = scaleMaxTof;
+fSeg   = consensusSeg;
+fLabelAll = replace(fSeg, 'seg.nii.gz', 'labelAll.nii.gz');
+fLabel    = replace(fSeg, 'seg.nii.gz', 'label.nii.gz'   );
+if forceThis || ~exist(fLabel,'file')
+    disp('vessel label map... computing');
+    mriSeg = MRIread(fSeg);
+    mriMask = mriSeg; clear mriSeg;
+    mriMask.vol = logical(mriMask.vol>1);
+    CC = bwconncomp(mriMask.vol,26);
+    [~,b] = sort(cellfun('length',CC.PixelIdxList),'descend');
+    CC.PixelIdxList = CC.PixelIdxList(b);
+    mriLabelAll = mriMask; clear mriMask;
+    mriLabelAll.fspec = fLabelAll;
+    mriLabelAll.vol = zeros(size(mriLabelAll.vol),'uint16');
+    for v = 1:length(CC.PixelIdxList)
+        mriLabelAll.vol(CC.PixelIdxList{v}) = uint16(v);
+    end
+    MRIwrite(mriLabelAll, fLabelAll,'short');
+    % visualize vessel labels
+    cmd = {src.fs};
+    cmd{end+1} = 'freeview \';
+    cmd{end+1} = ['-v ' fTof      ' \'];
+    cmd{end+1} = ['-v ' vfMRI     ':resample=nearest \'];
+    cmd{end+1} = ['-v ' fLabelAll ':resample=nearest'];
+    disp(strjoin(cmd,newline));
+    % select vessels
+    vesselIdx = sort([7 9 45 19 27 23 66 8 16 15 17 375 32 28 12 13 49 26 11 20 36]); %1->supuriously connected to the sagittal sinus
+    % rewrite labels with only selected vessels
+    mriLabel = mriLabelAll; clear mriLabelAll;
+    mriLabel.fspec = fLabel;
+    mriLabel.vol(~ismember(mriLabel.vol,vesselIdx)) = 0;
+    for v = 1:length(vesselIdx)
+        mriLabel.vol(mriLabel.vol==vesselIdx(v)) = uint16(v);
+    end
+    MRIwrite(mriLabel, fLabel,'uchar');
+    disp('vessel label map... done');
 else
-    mriLabels = MRIread(mriLabels.fspec);
+    disp('vessel label map... already done... loading');
+    mriLabel = MRIread(fLabel);
+    disp('vessel label map... already done... loaded');
 end
-
-
-% Crop out individual vessels
-clear vessels
-for v = 1:length(vesselIdx)
+% crop out each vessel
+nVessel = length(unique(mriLabel.vol(:)))-1;
+fSegList  = cell(nVessel, 1);
+fMaskList = cell(nVessel, 1);
+tmpDir = tempname; if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
+for v = 1:nVessel
+    fSegList{v}  = replace(fLabel, 'label.nii.gz', ['vessel-' sprintf('%02d',v) '_seg.nii.gz']);
+    fMaskList{v} = replace(fLabel, 'label.nii.gz', ['vessel-' sprintf('%02d',v) '_mask.nii.gz']);
     disp(' ')
     disp('--------------------------------');
     disp('--------------------------------');
-    disp(['Vessel ' sprintf('%02d',vesselIdx(v)) ' (' num2str(v) '/' num2str(length(vesselIdx)) ') cropping out...']);
+    disp(['Vessel ' sprintf('%02d',v) ' (' num2str(v) '/' num2str(nVessel) ') cropping out...']);
     disp('---------------');
     disp('---------------');
-
-    vessels(v).label      = vesselIdx(v);
-    vessels(v).ref.fLabel = mriLabels.fspec;
-    vessels(v).ref.fTof   = mriTof.fspec;
-    
-    % find bounding box for orginal resolution
-    mri = mriLabels;
-    mri.vol = mri.vol==vesselIdx(v);
-    [dim1, dim2, dim3] = ind2sub(size(mri.vol), find(mri.vol));
-    dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1;
-    dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1;
-    dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1;
-    dim1(dim1>size(mri.vol,1)) = size(mri.vol,1);
-    dim2(dim2>size(mri.vol,2)) = size(mri.vol,2);
-    dim3(dim3>size(mri.vol,3)) = size(mri.vol,3);
-    if mod(mean(dim1),1); if dim1(1) ~= 1; dim1(1) = dim1(1) - 1; else; dim1(2) = dim1(2) + 1; end; end
-    if mod(mean(dim2),1); if dim2(1) ~= 1; dim2(1) = dim2(1) - 1; else; dim2(2) = dim2(2) + 1; end; end
-    if mod(mean(dim3),1); if dim3(1) ~= 1; dim3(1) = dim3(1) - 1; else; dim3(2) = dim3(2) + 1; end; end
-    % crop original resolution label to a reference grid
-    vessels(v).cropRef.center = [ mean(dim2)  mean(dim1)          1 ]-1;
-    vessels(v).cropRef.size   = [range(dim2) range(dim1) range(dim3)]+1;
-    vessels(v).cropRef.fMask  = replace(vessels(v).ref.fLabel, 'selectedLabel.nii.gz', ['vessel-' sprintf('%02d',vesselIdx(v)) '_mask.nii.gz']);
-    if forceThis || ~exist(vessels(v).cropRef.fMask,'file')
+    if forceThis || ~exist(fMaskList{v},'file') || ~exist(fSegList{v},'file')
+        % write full-size mask
+        mriMask     = mriLabel;
+        mriMask.vol = mriMask.vol==v;
+        mriMask.fspec = fullfile(tmpDir,'vesselMask.nii.gz');
+        MRIwrite(mriMask,mriMask.fspec,'uchar');
+        % find bounding box
+        [dim1, dim2, dim3] = ind2sub(size(mriMask.vol), find(mriMask.vol));
+        dim1 = [min(dim1) max(dim1)]; dim1 = dim1 + [-1 1]; dim1(dim1<1) = 1;
+        dim2 = [min(dim2) max(dim2)]; dim2 = dim2 + [-1 1]; dim2(dim2<1) = 1;
+        dim3 = [min(dim3) max(dim3)]; dim3 = dim3 + [-1 1]; dim3(dim3<1) = 1;
+        dim1(dim1>size(mriMask.vol,1)) = size(mriMask.vol,1);
+        dim2(dim2>size(mriMask.vol,2)) = size(mriMask.vol,2);
+        dim3(dim3>size(mriMask.vol,3)) = size(mriMask.vol,3);
+        if mod(mean(dim1),1); if dim1(1) ~= 1; dim1(1) = dim1(1) - 1; else; dim1(2) = dim1(2) + 1; end; end
+        if mod(mean(dim2),1); if dim2(1) ~= 1; dim2(1) = dim2(1) - 1; else; dim2(2) = dim2(2) + 1; end; end
+        if mod(mean(dim3),1); if dim3(1) ~= 1; dim3(1) = dim3(1) - 1; else; dim3(2) = dim3(2) + 1; end; end
+        mri_convert_center = [ mean(dim2)  mean(dim1)          1 ]-1;
+        mri_convert_size   = [range(dim2) range(dim1) range(dim3)]+1;
+        % crop mask
         cmd = {src.fs};
         cmd{end+1} = 'mri_convert \';
-        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, vessels(v).cropRef.center, 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, vessels(v).cropRef.size  , 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = [vessels(v).ref.fLabel ' \'];
-        cmd{end+1} = vessels(v).cropRef.fMask;
+        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = [mriMask.fspec ' \'];
+        cmd{end+1} = fMaskList{v};
         system(strjoin(cmd,newline),'-echo');
-        mri = MRIread(vessels(v).cropRef.fMask);
-        mri.vol = mri.vol==vessels(v).label;
-        MRIwrite(mri, vessels(v).cropRef.fMask);
+        % crop segmentation
+        cmd = {src.fs};
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = [fSeg ' \'];
+        cmd{end+1} = fSegList{v};
+        system(strjoin(cmd,newline),'-echo');
+        disp(['Vessel ' sprintf('%02d',v) ' (' num2str(v) '/' num2str(nVessel) ') cropping out... done']);
+        disp('--------------------------------');
+        disp('--------------------------------');
+        disp(' ');
+    else
+        disp(['Vessel ' sprintf('%02d',v) ' (' num2str(v) '/' num2str(nVessel) ') cropping out...already done']);
+        disp('--------------------------------');
+        disp('--------------------------------');
+        disp(' ');
     end
-
-    vessels(v).cropRef.fMask;
-    vessels(v).cropRef.res       = res;
-    vessels(v).cropRef.usList    = usList;
-    vessels(v).cropRef.resList   = cell(1, length(vessels(v).cropRef.usList));
-    vessels(v).cropRef.fMaskList = cell(1, length(vessels(v).cropRef.usList));
-    vessels(v).fMaskList = cell(length(vessels(v).cropRef.usList), 1);
-    for p = 1:length(vessels(v).cropRef.usList)
-        vessels(v).cropRef.resList{p}   = res./vessels(v).cropRef.usList(p);
-    end
-    for p = 1:length(vessels(v).cropRef.usList)
-        disp(' ')
-        disp(['---------------------------']);
-        disp(['scale=' num2str(vessels(v).cropRef.usList(p)) ' (' num2str(p) '/' num2str(length(vessels(v).cropRef.usList)) ') processing...']);
-        disp(['---------------------------']);
-
-        % To obtain a reference grid (--like), upsample the vessel mask derived from original resolution data
-        vessels(v).cropRef.fMaskList{p} = replace(vessels(v).cropRef.fMask, 'mask.nii.gz', ['maskScale' num2str(usList(p)) '.nii.gz']);
-        if forceThis || ~exist(vessels(v).cropRef.fMaskList{p},'file')
-            cmd = {src.fs};
-            cmd{end+1} = 'mri_convert \';
-            cmd{end+1} = ['--resample_type nearest \'];
-            cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), vessels(v).cropRef.resList{p}, 'UniformOutput', false), ' ') ' \'];
-            cmd{end+1} = [vessels(v).cropRef.fMask ' \'];
-            cmd{end+1} =  vessels(v).cropRef.fMaskList{p};
-            system(strjoin(cmd,newline),'-echo');
-        end
-        % Use the reference grid to crop segmentation from all scales, then upsample (nearest neighbor) to a mask at the highest scale
-        vessels(v).fMaskList{p} = fullfile(fileparts(tofCropPrcSclSeg{p}), ['vessel-' sprintf('%02d',vesselIdx(v)) '_mask.nii.gz']);
-        if forceThis || ~exist(vessels(v).fMaskList{p},'file')
-            % crop (resample --like) vesselboost segmentation
-            cmd = {src.fs};
-            cmd{end+1} = 'mri_convert \';
-            cmd{end+1} = ['--resample_type nearest \'];
-            cmd{end+1} = ['--like ' vessels(v).cropRef.fMaskList{p} ' \'];
-            cmd{end+1} = [tofCropPrcSclSeg{p} ' \'];
-            cmd{end+1} = vessels(v).fMaskList{p};
-            system(strjoin(cmd,newline),'-echo');
-            % match candidate vessels in seg from upsampled data to the one vessel in the mask derived from original resolution data
-            mriRef = MRIread(vessels(v).cropRef.fMaskList{p});
-            mri    = MRIread(vessels(v).fMaskList{p});
-            CCRef = bwconncomp(mriRef.vol,26);
-            CC    = bwconncomp(mri.vol   ,26);
-            n = zeros(length(CC.PixelIdxList),1);
-            for c = 1:length(CC.PixelIdxList)
-                n(c) = nnz(ismember(CCRef.PixelIdxList{1},CC.PixelIdxList{c}));
-            end
-            [~,b] = max(n);
-            % turn the segmentation into a mask of the best-match vessel
-            eMask = true(size(mri.vol));
-            eMask(CC.PixelIdxList{b}) = false;
-            mri.vol(eMask) = false;
-            MRIwrite(mri, vessels(v).fMaskList{p});
-            % upsample to the highest scale
-            [~,b] = max(vessels(v).cropRef.usList);
-            maxRes = vessels(v).cropRef.resList{b};
-            if any(vessels(v).cropRef.resList{p}~=maxRes)
-                cmd = {src.fs};
-                cmd{end+1} = 'mri_convert \';
-                cmd{end+1} = ['--resample_type nearest \'];
-                cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), maxRes, 'UniformOutput', false), ' ') ' \'];
-                cmd{end+1} = [vessels(v).fMaskList{p} ' \'];
-                cmd{end+1} = vessels(v).fMaskList{p};
-                system(strjoin(cmd,newline),'-echo');
-            end
-        end
-        disp(['---------------------------']);
-        disp(['scale=' num2str(vessels(v).cropRef.usList(p)) ' (' num2str(p) '/' num2str(length(vessels(v).cropRef.usList)) ') done.']);
-        disp(['---------------------------']);
-        disp(' ')
-    end
-    disp('----------------------------------');
-    disp('----------------------------------');
-    disp(['Vessel ' sprintf('%02d',vesselIdx(v)) ' (' num2str(v) '/' num2str(length(vesselIdx)) ') cropping out done.']);
-    disp('----------------------------------');
-    disp('----------------------------------');
-    disp(' ')
 end
-%% %%%%%%%%%%%%%%%%%%%%%
-vessels;
+rmdir(tmpDir, 's'); clear tmpDir;
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+fSegList;
+fMaskList;
 
 
 
-forceThis = 0;
+
+forceThis = 1;
 %%%%%%%%%%%%%%%%%%%%%%
 %% Save vessel pointer
 %%%%%%%%%%%%%%%%%%%%%%
-info.vessel.pointer = vessels;
+info.vessel.pointer = fMaskList;
 info.vessel.pointerFile = fullfile(info.project.code,mfilename,['sub-' num2str(S) '_vesselPointer' datestr(now,'yyyymmddHHMMSS') '.mat']);
 if ~exist(fileparts(info.vessel.pointerFile),'dir'); mkdir(fileparts(info.vessel.pointerFile)); end
 if forceThis || ~exist(info.vessel.pointerFile,'file')
     save(info.vessel.pointerFile,'info');
     disp(['Vessel pointer saved to:' newline info.vessel.pointerFile]);
 end
+%% %%%%%%%%%%%%%%%%%%%
+info;
 
 
