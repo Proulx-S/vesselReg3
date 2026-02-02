@@ -244,7 +244,7 @@ end
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Multiscale Vesselboost -- consensus segmentation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -362,7 +362,7 @@ disp(strjoin(cmd,newline));
 
 
 % Note: we might want to consider a more strict criteria (connectivity parameter for bwconncomp) to better separate vessels that are close to one another.
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Create single-vessel segmentations/masks (cropped to vessel bounding box)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -476,7 +476,7 @@ fMaskList;
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%
 %% Save vessel pointer
 %%%%%%%%%%%%%%%%%%%%%%
@@ -491,3 +491,106 @@ end
 info;
 
 
+
+
+
+
+
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% VMTK: surfaces and centerlines from segmented volumes (from vesselReg/vesselReg2)
+%% Uses @bassWrap-reg/vmtk_surfFromSeg.m, vmtk_surfClean, vmtk_surfSmoothing,
+%% vmtk_surfUpSample, vmtk_centerlinesFromSurf.m, vmtk_viewVolAndSurf.m
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+forceThis = 1;
+doSurfUpSample = false;  % set true to upsample for thin/coarse meshes (butterfly, 1 pass)
+
+surfDir       = fullfile(projectCode,'result','surf');       if ~exist(surfDir,'dir'); mkdir(surfDir); end
+centerlineDir = fullfile(projectCode,'result','centerlines'); if ~exist(centerlineDir,'dir'); mkdir(centerlineDir); end
+
+vesselSurfList       = cell(nVessel, 1);
+vesselCenterlineList = cell(nVessel, 1);
+for v = 1:nVessel
+    vesselSurfList{v}       = fullfile(surfDir,       ['vessel-' sprintf('%02d',v) '.vtk']);
+    vesselCenterlineList{v} = fullfile(centerlineDir, ['vessel-' sprintf('%02d',v) '.vtk']);
+end
+
+% Create surface for each vessel: marching cubes -> clean -> smoothing [-> upsample]
+for v = 1:nVessel
+    if forceThis || ~exist(vesselSurfList{v},'file')
+        fSurfRaw    = replace(vesselSurfList{v}, '.vtk', '_raw.vtk');
+        fSurfCleaned = replace(vesselSurfList{v}, '.vtk', '_cleaned.vtk');
+        vmtk_surfFromSeg(fSegList{v}, fSurfRaw);
+        vmtk_surfClean(fSurfRaw, fSurfCleaned);
+        options.passband = 0.01;
+        options.iterations = 2000;
+        vmtk_surfSmoothing(fSurfCleaned, vesselSurfList{v}, options);
+        % if doSurfUpSample
+        %     fSurfUp = replace(vesselSurfList{v}, '.vtk', '_up.vtk');
+        %     vmtk_surfUpSample(vesselSurfList{v}, fSurfUp);
+        %     movefile(fSurfUp, vesselSurfList{v});
+        % end
+        vmtk_viewVolAndSurf(fSegList{v}, vesselSurfList{v});
+    end
+end
+
+% Extract centerlines from each surface
+for v = 1:nVessel
+    if forceThis || ~exist(vesselCenterlineList{v},'file')
+        cmd = vmtk_centerlinesFromSurf(vesselSurfList{v}, vesselCenterlineList{v}, [], [], 1);
+        disp(strjoin(cmd,newline));
+    end
+end
+
+% Visualize volume with surface or centerlines (uncomment and set v as needed)
+% v = 1;
+% vmtk_viewVolAndSurf(scaleMaxTof, vesselSurfList{v});
+% vmtk_viewVolAndSurf(scaleMaxTof, vesselCenterlineList{v});
+% % If vmtk_viewVolAndCenterlines exists in your bassWrap-reg:
+% % vmtk_viewVolAndCenterlines(scaleMaxTof, vesselCenterlineList{v}, 1);
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% VMTK activetubes: refine centerlines using intensity (from @bassWrap-reg/vmtk_activetubes.m)
+%% Requires initial centerlines (e.g. from vmtk_centerlinesFromSurf above).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+forceThis = 0;
+activetubesDir = fullfile(projectCode,'result','centerlines_refined');
+if ~exist(activetubesDir,'dir'); mkdir(activetubesDir); end
+
+vesselCenterlineRefinedList = cell(nVessel, 1);
+opts = struct('iterations', 100, 'potentialweight', 1.0, 'stiffnessweight', 1.0, 'forceThis', forceThis);
+for v = 1:nVessel
+    vesselCenterlineRefinedList{v} = fullfile(activetubesDir, ['vessel-' sprintf('%02d',v) '_refined.vtk']);
+    if forceThis || ~exist(vesselCenterlineRefinedList{v},'file')
+        vesselCenterlineRefinedList{v} = vmtk_activetubes(scaleMaxTof, vesselCenterlineList{v}, vesselCenterlineRefinedList{v}, opts);
+    end
+end
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ANTs registration (template; bassWrap-reg has no ANTs wrapper)
+%% Use src.ants (e.g. 'ml ants/2.5.3') and run antsRegistration / antsApplyTransforms.
+%% For 3D affine registration, @bassWrap-reg/afni_3dAllineate.m is an alternative.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Example: rigid register moving volume to fixed, then apply transform.
+% Uncomment and set fFixed, fMoving, regDir as needed.
+%
+% fFixed  = scaleMaxTof;   % or vfMRI reference volume
+% fMoving = fullfile(projectCode,'data','vfMRI','vfMRI.nii.gz');
+% regDir  = fullfile(projectCode,'result','ants_reg');
+% if ~exist(regDir,'dir'); mkdir(regDir); end
+% prefix  = fullfile(regDir,'ants');
+%
+% cmd = {src.ants};
+% cmd{end+1} = ['antsRegistration -d 3 -f ' fFixed ' -m ' fMoving ' -o ' prefix ' -n linear --transform Rigid[0.1] --metric MI[' fFixed ',' fMoving ',1,32] --convergence [1000x500x250x0,1e-6,10] --shrink-factors 8x4x2x1 --smoothing-sigmas 3x2x1x0vox'];
+% system(strjoin(cmd,newline),'-echo');
+%
+% fMovingReg = fullfile(regDir,'vfMRI_reg.nii.gz');
+% cmd = {src.ants};
+% cmd{end+1} = ['antsApplyTransforms -d 3 -i ' fMoving ' -o ' fMovingReg ' -r ' fFixed ' -t ' [prefix '0GenericAffine.mat']];
+% system(strjoin(cmd,newline),'-echo');
+
+
+info.vessel.pointer
