@@ -364,9 +364,10 @@ disp(strjoin(cmd,newline));
 
 
 forceThis = 1;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Make single-vessel label map and manually select vessels
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Note: we might want to consider a more strict criteria (connectivity parameter for bwconncomp) to better separate vessels that are close to one another.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Individualize vessels into a single-vessel label map
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fTof   = tofCropPrcScl{end};
 fSeg   = consensusSeg;
 fLabelAll = replace(fSeg, 'seg.nii.gz', 'labelAll.nii.gz');
@@ -375,7 +376,11 @@ if forceThis || ~exist(fLabel,'file')
     disp('vessel label map... computing');
     mriSeg = MRIread(fSeg);
     mriMask = mriSeg; clear mriSeg;
+    %!!!!!!!!!
+    %!!!!!!!!!
     mriMask.vol = logical(mriMask.vol>1);
+    %!!!!!!!!!
+    %!!!!!!!!!
     CC = bwconncomp(mriMask.vol,26);
     [~,b] = sort(cellfun('length',CC.PixelIdxList),'descend');
     CC.PixelIdxList = CC.PixelIdxList(b);
@@ -415,12 +420,11 @@ if ~exist(fileparts(info.subject.label.fList{1}),'dir'); mkdir(fileparts(info.su
 if forceThis || ~exist(info.subject.label.fList{1},'file')
     copyfile(fLabel,info.subject.label.fList{1});
 end
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 info.subject.label.fList
 
 
 
-% Note: we might want to consider a more strict criteria (connectivity parameter for bwconncomp) to better separate vessels that are close to one another.
 forceThis = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Crop out each single vessel
