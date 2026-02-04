@@ -361,6 +361,7 @@ if forceThis || ~exist(info.subject.seg.fList{end},'file')
     copyfile(consensusSeg,info.subject.seg.fList{end});
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+upsampledTof
 upsampledSegList;
 info.subject.tof.fList;
 info.subject.seg.fList;
@@ -478,8 +479,8 @@ fVesselLabelList = cell(nVessel, length(fSegList));
 fVesselMaskList  = cell(nVessel, 1               );
 tmpDir = tempname; if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
 for v = 1:nVessel
-    fVesselTofList{v}  = replace(tofCropPrc     , '/tof.nii.gz'       , ['/vessel-' sprintf('%02d',v) '_tof.nii.gz' ]);
-    fVesselMaskList{v} = replace(fLabelList{end}, '/labels_seg.nii.gz', ['/vessel-' sprintf('%02d',v) '_mask.nii.gz']);
+    fVesselTofList{v}  = replace(tofUpsampled   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_tof.nii.gz' ]);
+    fVesselMaskList{v} = replace(fLabelList{end}, '/labels_seg.nii.gz'   , ['/vessel-' sprintf('%02d',v) '_mask.nii.gz']);
     for s = 1:length(fSegList)
         fVesselLabelList{v,s} = replace(fLabelList{s}, '/labels_', ['/vessel-' sprintf('%02d',v) '_labels_']);
         fVesselSegList{v,s}   = replace(fSegList{s}  , '/seg'    , ['/vessel-' sprintf('%02d',v) '_seg'    ]);
@@ -510,38 +511,38 @@ for v = 1:nVessel
         mri_convert_size   = [range(dim2) range(dim1) range(dim3)]+1;
         
         cmd = {src.fs};
-        % upsampled tof
+        % crop tof
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = [tofCropPrcScl{end} ' \'];
+        cmd{end+1} = [upsampledTof ' \'];
         cmd{end+1} = fVesselTofList{v};
-        % % crop mask
-        % MRIwrite(mriMask, mriMask.fspec,'uchar');
-        % cmd{end+1} = 'mri_convert \';
-        % cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
-        % cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
-        % cmd{end+1} = [mriMask.fspec ' \'];
-        % cmd{end+1} = fVesselMaskList{v};
-        % % crop segmentations and labels
-        % for s = 1:length(fSegList)
-        %     cmd{end+1} = 'echo _____________________________________________________';
-        %     cmd{end+1} = ['echo scale ' num2str(s) '/' num2str(length(fSegList)) ': cropping...'];
-        %     % crop segmentations
-        %     cmd{end+1} = 'mri_convert \';
-        %     cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
-        %     cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
-        %     cmd{end+1} = [fSegList{s} ' \'];
-        %     cmd{end+1} = fVesselSegList{v,s};
-        %     % crop labels
-        %     cmd{end+1} = 'mri_convert \';
-        %     cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
-        %     cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
-        %     cmd{end+1} = [fLabelList{s} ' \'];
-        %     cmd{end+1} = fVesselLabelList{v,s};
+        % crop mask
+        MRIwrite(mriMask, mriMask.fspec,'uchar');
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = [mriMask.fspec ' \'];
+        cmd{end+1} = fVesselMaskList{v};
+        % crop segmentations and labels
+        for s = 1:length(fSegList)
+            cmd{end+1} = 'echo _____________________________________________________';
+            cmd{end+1} = ['echo scale ' num2str(s) '/' num2str(length(fSegList)) ': cropping...'];
+            % crop segmentations
+            cmd{end+1} = 'mri_convert \';
+            cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
+            cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
+            cmd{end+1} = [fSegList{s} ' \'];
+            cmd{end+1} = fVesselSegList{v,s};
+            % crop labels
+            cmd{end+1} = 'mri_convert \';
+            cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
+            cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
+            cmd{end+1} = [fLabelList{s} ' \'];
+            cmd{end+1} = fVesselLabelList{v,s};
             
-        %     cmd{end+1} = ['echo scale ' num2str(s) '/' num2str(length(fSegList)) ': done.'];
-        % end
+            cmd{end+1} = ['echo scale ' num2str(s) '/' num2str(length(fSegList)) ': done.'];
+        end
         system(strjoin(cmd,newline),'-echo');
         disp(['Vessel ' sprintf('%02d',v) ' (' num2str(v) '/' num2str(nVessel) ') cropping out... done']);
         disp('--------------------------------');
@@ -596,9 +597,11 @@ for v = 1:nVessel
 end
 rmdir(tmpDir, 's'); clear tmpDir;
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%
+fVesselTofList;
 fVesselMaskList;
 fVesselSegList;
 fVesselLabelList;
+info.vessel.tof;
 info.vessel.mask;
 info.vessel.seg;
 info.vessel.label;
