@@ -104,161 +104,76 @@ scriptDir = fullfile(projectCode,scriptDir); if ~exist(scriptDir,'dir'); mkdir(s
 %% Get data pointer
 %%%%%%%%%%%%%%%%%%%
 % sub-2_vesselPointer20260124161412.mat
-S=2; arxvDir = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none';
-dir(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer*.mat']))
-load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260125165227.mat']));
+fName = 'sub-2_vesselPointer20260203165419.mat';
+% S=2; arxvDir = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none';
+% dir(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer*.mat']))
+% load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260125165227.mat']));
+load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',fName));
 %% %%%%%%%%%%%%%%%%
-vessels = info.vessel.pointer;
+vessels = info.vessel;
+info.project.code
 
-
-
-
-forceThis = 0;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Compute cross-scale consensus segmentation
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Choose what preproc (scale) to use for the consensus
-% cases with processing: bias-field-correction and denoising -> upsampling -> vesselboost
-prcInd = contains(fileparts(fileparts(vessels(1).fSeg))',{'tofPrcUps' 'tofUps1xPrc'});
-% cases with 2^n upsampling scale
-prcInd = prcInd & ismember(vessels(1).upsampleFactor,[1 2 4 8]);
-return
-for v = 1:length(vessels)
-    disp('----------------------------------');
-    disp('----------------------------------');
-    disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... computing']);
-    disp('----------------------------------');
-    disp('----------------------------------');
-    vLabel = vessels(v).label;
-    fSegList          = vessels(v).fSeg(prcInd)';
-    fSegList_usFactor = vessels(v).upsampleFactor(prcInd)';
-    usRefList          = vessels(v).cropRef.fLabelList';
-    usRefList_usFactor = vessels(v).cropRef.usList';
-
-    % Upsample segmentation from all scales to the highest resolution
-    [~,b] = max(usRefList_usFactor);
-    fLike = usRefList{b};
-    fSegListCleaned = cell(length(fSegList),1);
-    fSegListCleanedResampled = cell(length(fSegList),1);
-    for p = 1:length(fSegList)
-        disp(['scale' num2str(fSegList_usFactor(p)) ': ' num2str(p) '/' num2str(length(fSegList))]);
-        % Exclude voxels from other vessels or not connected to the main vessel
-        fSegListCleaned{p} = fullfile(scriptDir,['vessel-' sprintf('%02d',vLabel) '_scale-' num2str(fSegList_usFactor(p)) '_mask.nii.gz']);
-        if forceThis || ~exist(fSegListCleaned{p},'file')
-            disp(['mask cleaning... computing']);
-            mriRef = MRIread(usRefList{fSegList_usFactor(p)==usRefList_usFactor});
-            mri    = MRIread(fSegList{p});
-            CCRef = bwconncomp(mriRef.vol==vLabel,26);
-            CC    = bwconncomp(mri.vol,26);
-            % find best match component between the mask upsampled from the vessel of interest and the segmentation on upsampled data
-            n = zeros(length(CC.PixelIdxList),1);
-            for c = 1:length(CC.PixelIdxList)
-                n(c) = nnz(ismember(CCRef.PixelIdxList{1},CC.PixelIdxList{c}));
-            end
-            [~,b] = max(n);
-            % exclude voxels based on that component
-            eMask = true(size(mri.vol));
-            eMask(CC.PixelIdxList{b}) = false;
-            mri.vol(eMask) = 0;
-            MRIwrite(mri, fSegListCleaned{p});
-            disp(['mask cleaning... done']);
-        else
-            disp(['mask cleaning... already done']);
-        end
-
-        % Upsample the cleaned mask to the highest resolution
-        fSegListCleanedResampled{p} = fullfile(scriptDir,['vessel-' sprintf('%02d',vLabel) '_scale-' num2str(fSegList_usFactor(p)) '_maskUpsampled.nii.gz']);
-        if forceThis || ~exist(fSegListCleanedResampled{p},'file')
-            disp(['mask upsampling... computing']);
-            cmd = {src.fs};
-            cmd{end+1} = 'mri_convert \';
-            cmd{end+1} = ['--resample_type nearest \'];
-            cmd{end+1} = ['--like ' fLike ' \'];
-            cmd{end+1} = [fSegListCleaned{p} ' \'];
-            cmd{end+1} = [fSegListCleanedResampled{p}];
-            system(strjoin(cmd,newline),'-echo');
-            disp(['mask upsampling... done']);
-        else
-            disp(['mask upsampling... already done']);
-        end
-    end
-
-    % Compute consensus segmentation across scales
-    vessels(v).fSegConsensus = fullfile(projectCode,'result',['vessel-' sprintf('%02d',vLabel) '_scale-consensus.nii.gz']);
-    if ~exist(fileparts(vessels(v).fSegConsensus),'dir'); mkdir(fileparts(vessels(v).fSegConsensus)); end
-    if forceThis || ~exist(vessels(v).fSegConsensus,'file')
-        disp(['consensus segmentation... computing']);
-        vessel = [];
-        for p = 1:length(fSegListCleanedResampled)
-            mri = MRIread(fSegListCleanedResampled{p});
-            vessel = cat(5,vessel,mri.vol);
-        end
-        mri.vol = sum(vessel,5);
-        MRIwrite(mri, vessels(v).fSegConsensus);
-        disp(['consensus segmentation... done']);
-    else
-        disp(['consensus segmentation... already done']);
-    end
-
-    % Output vesselboost seg performed on tof at original scale
-    vessels(v).fSegScale1           = fullfile(projectCode,'result',['vessel-' sprintf('%02d',vLabel) '_scale-1.nii.gz']);
-    if ~exist(fileparts(vessels(v).fSegScale1          ),'dir'); mkdir(fileparts(vessels(v).fSegScale1          )); end
-    if forceThis || ~exist(vessels(v).fSegScale1,'file')
-        copyfile(fSegListCleaned{fSegList_usFactor == 1}, vessels(v).fSegScale1);
-    end
-    % Output vesselboost seg performed on tof at original scale then upsampled to match consensus segmentation
-    vessels(v).fSegScale1_upsampled = fullfile(projectCode,'result',['vessel-' sprintf('%02d',vLabel) '_scale-1Upsampled.nii.gz']);
-    if ~exist(fileparts(vessels(v).fSegScale1_upsampled),'dir'); mkdir(fileparts(vessels(v).fSegScale1_upsampled)); end
-    if forceThis || ~exist(vessels(v).fSegScale1_upsampled,'file')
-        copyfile(fSegListCleanedResampled{fSegList_usFactor == 1}, vessels(v).fSegScale1_upsampled);
-    end
-
-    
-
-    disp('----------------------------------');
-    disp('----------------------------------');
-    disp(['Cross-scale consensus segmentation for vessel ' num2str(v) ' ... done']);
-    disp('----------------------------------');
-    disp('----------------------------------');
-end
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 return
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Compare single- to multi-scale
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% visualize vessels on vfMRI
-cmd = {src.fs};
-cmd{end+1} = 'freeview \';
-cmd{end+1} = ['-v ' vessels(v).ref.fTof ' \'];
-for v = 1:length(vessels)
-    cmd{end+1} = ['-v ' [vessels(v).fSegConsensus ':isosurface=1,255'] ' \'];
-    % cmd{end+1} = ['-v ' [vessels(v).fSegScale1 ':isosurface=1,255'] ' \'];
-    cmd{end+1} = ['-v ' [vessels(v).fSegScale1_upsampled ':isosurface=1,255'] ' \'];
-end
-cmd{end}(end-1:end) = [];
-disp(strjoin(cmd,newline));
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%
-return
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Visualize vessels on vfMRI
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% average vfMRI for visualization
-[vessels.fVfmri] = deal(fullfile(info.project.code,'tmp','vfMRImean.nii.gz'));
-if forceThis || ~exist(vessels(1).fVfmri,'file')
-    mri = MRIread(fullfile(info.project.code,'data','vfMRI','vfMRI.nii.gz'));
-    mri.vol = mean(mri.vol,4);
-    MRIwrite(mri, vessels(1).ref.fVfmri);
+% choose good vessel
+vIdxList = [6 7 8 11 12 13 14 17 19];
+nVessel = length(vIdxList);
+[p,~,~] = fileparts(vessels(vIdxList(1)).mask.f);
+
+tmpDir = fullfile(info.project.code,'tmp'); if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
+fMaskList = [vessels(vIdxList).mask]; fMaskList = {fMaskList.f}';
+fTof = info.subject.tof.fList{1};
+fSeg = info.subject.seg.fList{end};
+
+fSurfList       = cell(nVessel, 1);
+fCenterlineList = cell(nVessel, 1);
+for v = 1:nVessel
+    vIdx = vIdxList(v);
+    fSurfList{v}              = fullfile(tmpDir, ['vessel-' sprintf('%02d',vIdx) '_surf.vtk']);
+    fCenterlineList{v}        = fullfile(tmpDir, ['vessel-' sprintf('%02d',vIdx) '_centerline.vtk']);
+    fCenterlineRefinedList{v} = fullfile(tmpDir, ['vessel-' sprintf('%02d',vIdx) '_refined.vtk']);
 end
-% visualize vessels on vfMRI
-cmd = {src.fs};
-cmd{end+1} = 'freeview \';
-cmd{end+1} = ['-v ' vessels(v).fVfmri ' \'];
-for v = 1:length(vessels)
-    cmd{end+1} = ['-v ' [vessels(v).fSegConsensus ':isosurface=1,255'] ' \'];
+
+% Create surface for each vessel: marching cubes -> clean -> smoothing [-> upsample]
+forceThis = 1;
+for v = 1:nVessel
+    if forceThis || ~exist(fSurfList{v},'file')
+        vmtk_surfFromSeg(fMaskList{v}, fSurfList{v});
+        vmtk_surfClean(fSurfList{v}, fSurfList{v});
+        options.passband = 0.01;
+        options.iterations = 2000;
+        vmtk_surfSmoothing(fSurfList{v}, fSurfList{v}, options);
+        % vmtk_viewVolAndSurf(fMaskList{v}, fSurfList{v});
+
+    end
 end
-cmd{end}(end-1:end) = [];
-disp(strjoin(cmd,newline));
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Extract centerlines from each surface
+for v = 1:nVessel
+    if forceThis || ~exist(fCenterlineList{v},'file')
+        cmd = vmtk_centerlinesFromSurf(fSurfList{v}, fCenterlineList{v}, [], [], 1);
+        % vmtk_viewVolAndSurf(fMaskList{v}, fCenterlineList{v});
+        % vmtk_viewVolAndSurf(fTof, fCenterlineList{v});
+        % vmtk_viewVolAndSurf(fSeg, fCenterlineList{v});
+        % vmtk_viewVolAndSurf(info.vessel(vIdx).seg.fList{end-2}, fCenterlineList{v});
+        
+    end
+end
+
+% Visualize volume with surface or centerlines (uncomment and set v as needed)
+% v = 1;
+% vmtk_viewVolAndSurf(scaleMaxTof, vesselSurfList{v});
+% vmtk_viewVolAndSurf(scaleMaxTof, vesselCenterlineList{v});
+% % If vmtk_viewVolAndCenterlines exists in your bassWrap-reg:
+% % vmtk_viewVolAndCenterlines(scaleMaxTof, vesselCenterlineList{v}, 1);
+
+% Active tube refinement
+opts = struct('iterations', 100, 'potentialweight', 1.0, 'stiffnessweight', 1.0, 'forceThis', forceThis);
+for v = 1:nVessel
+    if forceThis || ~exist(fCenterlineRefinedList{v},'file')
+        fCenterlineRefinedList{v} = vmtk_activetubes(scaleMaxTof, fCenterlineList{v}, fCenterlineRefinedList{v}, opts);
+    end
+end
+
 
