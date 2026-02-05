@@ -153,7 +153,7 @@ end
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Vesselboost -- on original resolution tof (with preprocessing)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -211,7 +211,7 @@ info.subject.seg.fList;
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Multiscale Vesselboost -- on upsampled preprocessed tof (different scales)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -266,7 +266,7 @@ info.subject.seg.fList;
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Multiscale Vesselboost -- consensus segmentation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -387,7 +387,7 @@ disp(strjoin(cmd,newline));
 
 
 
-forceThis = 1;
+forceThis = 0;
 % Note: we might want to consider a more strict criteria (connectivity parameter for bwconncomp) to better separate vessels that are close to one another.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Individualize vessels into a single-vessel label map
@@ -421,9 +421,9 @@ fLabelList;
 
 
 
-forceThis = 1;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Select vessels and create reduced single-vessel label map
+forceThis = 0;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Select vessels and create a reduced single-vessel label map
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fTof           = tofCropPrcScl{end};
 fLabel         = fLabelList{end}; % use consensus-segmentation-based single-vessel label map
@@ -457,13 +457,13 @@ if ~exist(fileparts(info.subject.label.fList{1}),'dir'); mkdir(fileparts(info.su
 if forceThis || ~exist(info.subject.label.fList{1},'file')
     copyfile(fLabelSelected,info.subject.label.fList{1});
 end
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fLabelSelected;
 info.subject.label.fList;
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Crop out each single vessel
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -473,14 +473,16 @@ if ~exist('mriLabel','var')
     mriLabel = MRIread(fLabelSelected);
 end
 nVessel = length(unique(mriLabel.vol(:)))-1;
-fVesselTofList   = cell(nVessel, 1               );
-fVesselSegList   = cell(nVessel, length(fSegList));
-fVesselLabelList = cell(nVessel, length(fSegList));
-fVesselMaskList  = cell(nVessel, 1               );
+fVesselTofScale1List = cell(nVessel, 1               );
+fVesselTofList       = cell(nVessel, 1               );
+fVesselSegList       = cell(nVessel, length(fSegList));
+fVesselLabelList     = cell(nVessel, length(fSegList));
+fVesselMaskList      = cell(nVessel, 1               );
 tmpDir = tempname; if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
 for v = 1:nVessel
-    fVesselTofList{v}  = replace(tofUpsampled   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_tof.nii.gz' ]);
-    fVesselMaskList{v} = replace(fLabelList{end}, '/labels_seg.nii.gz'   , ['/vessel-' sprintf('%02d',v) '_mask.nii.gz']);
+    fVesselTofScale1List{v}  = replace(upsampledTof   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_scale-' '1'                  '_interp-nn_tof.nii.gz']);
+    fVesselTofList{v}        = replace(upsampledTof   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_scale-' num2str(max(usList)) '_interp-nn_tof.nii.gz']);
+    fVesselMaskList{v}       = replace(fLabelList{end}, '/labels_seg.nii.gz'   , ['/vessel-' sprintf('%02d',v)                                         '_mask.nii.gz']);
     for s = 1:length(fSegList)
         fVesselLabelList{v,s} = replace(fLabelList{s}, '/labels_', ['/vessel-' sprintf('%02d',v) '_labels_']);
         fVesselSegList{v,s}   = replace(fSegList{s}  , '/seg'    , ['/vessel-' sprintf('%02d',v) '_seg'    ]);
@@ -511,12 +513,18 @@ for v = 1:nVessel
         mri_convert_size   = [range(dim2) range(dim1) range(dim3)]+1;
         
         cmd = {src.fs};
-        % crop tof
+        % crop upsampled tof
         cmd{end+1} = 'mri_convert \';
         cmd{end+1} = ['--crop '       strjoin(arrayfun(@num2str, mri_convert_center, 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = ['--cropsize '   strjoin(arrayfun(@num2str, mri_convert_size  , 'UniformOutput', false), ' ') ' \'];
         cmd{end+1} = [upsampledTof ' \'];
         cmd{end+1} = fVesselTofList{v};
+        % downsample tof
+        cmd{end+1} = 'mri_convert \';
+        cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), res, 'UniformOutput', false), ' ') ' \'];
+        cmd{end+1} = ['--resample_type nearest \'];
+        cmd{end+1} = [fVesselTofList{v} ' \'];
+        cmd{end+1} = fVesselTofScale1List{v};
         % crop mask
         MRIwrite(mriMask, mriMask.fspec,'uchar');
         cmd{end+1} = 'mri_convert \';
@@ -557,11 +565,17 @@ for v = 1:nVessel
 end
 % Copy results
 for v = 1:nVessel
-    %tof
-    info.vessel(v).tof.f = fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_tof.nii.gz']);
-    if ~exist(fileparts(info.vessel(v).tof.f),'dir'); mkdir(fileparts(info.vessel(v).tof.f)); end
-    if forceThis || ~exist(info.vessel(v).tof.f,'file')
-        copyfile(fVesselTofList{v},info.vessel(v).tof.f);
+    %tof (upsampled to scale-max with nearest neighbor interpolation)
+    info.vessel(v).tof.f = {fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) 'scale-' max(usList) '_interp-nn_tof.nii.gz'])};
+    if ~exist(fileparts(info.vessel(v).tof.f{1}),'dir'); mkdir(fileparts(info.vessel(v).tof.f{1})); end
+    if forceThis || ~exist(info.vessel(v).tof.f{1},'file')
+        copyfile(fVesselTofList{v},info.vessel(v).tof.f{1});
+    end
+    %tof (original resolution)
+    info.vessel(v).tof.f{end+1} = fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_tof.nii.gz']);
+    if ~exist(fileparts(info.vessel(v).tof.f{end}),'dir'); mkdir(fileparts(info.vessel(v).tof.f{end})); end
+    if forceThis || ~exist(info.vessel(v).tof.f{end},'file')
+        copyfile(fVesselTofList{v},info.vessel(v).tof.f{end});
     end
     %mask
     str = strsplit(fVesselMaskList{v},'Scale'); str = str{2}; str = strsplit(str,{'/','_'}); str = str{1};
@@ -597,6 +611,7 @@ for v = 1:nVessel
 end
 rmdir(tmpDir, 's'); clear tmpDir;
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%
+fVesselTofScale1List;
 fVesselTofList;
 fVesselMaskList;
 fVesselSegList;
@@ -607,7 +622,7 @@ info.vessel.seg;
 info.vessel.label;
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%
 %% Save vessel pointer
 %%%%%%%%%%%%%%%%%%%%%%
