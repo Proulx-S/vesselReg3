@@ -565,14 +565,14 @@ for v = 1:nVessel
 end
 % Copy results
 for v = 1:nVessel
-    %tof (upsampled to scale-max with nearest neighbor interpolation)
-    info.vessel(v).tof.f = {fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) 'scale-' max(usList) '_interp-nn_tof.nii.gz'])};
+    %tof (original resolution)
+    info.vessel(v).tof.f{1} = {fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_tof.nii.gz'])};
     if ~exist(fileparts(info.vessel(v).tof.f{1}),'dir'); mkdir(fileparts(info.vessel(v).tof.f{1})); end
     if forceThis || ~exist(info.vessel(v).tof.f{1},'file')
-        copyfile(fVesselTofList{v},info.vessel(v).tof.f{1});
+        copyfile(fVesselTofScale1List{v},info.vessel(v).tof.f{1});
     end
-    %tof (original resolution)
-    info.vessel(v).tof.f{end+1} = fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_tof.nii.gz']);
+    %tof (upsampled to scale-max with nearest neighbor interpolation)
+    info.vessel(v).tof.f{end+1} = fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_scale-' num2str(max(usList)) '_interp-nn_tof.nii.gz']);
     if ~exist(fileparts(info.vessel(v).tof.f{end}),'dir'); mkdir(fileparts(info.vessel(v).tof.f{end})); end
     if forceThis || ~exist(info.vessel(v).tof.f{end},'file')
         copyfile(fVesselTofList{v},info.vessel(v).tof.f{end});
@@ -641,6 +641,8 @@ info;
 return
 
 
+tmp = [info.vessel.tof];
+tmp = cat(1,tmp.f);
 
 
 
