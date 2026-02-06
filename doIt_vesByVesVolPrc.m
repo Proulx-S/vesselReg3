@@ -104,7 +104,8 @@ scriptDir = fullfile(projectCode,scriptDir); if ~exist(scriptDir,'dir'); mkdir(s
 %% Get data pointer
 %%%%%%%%%%%%%%%%%%%
 % sub-2_vesselPointer20260124161412.mat
-fName = 'sub-2_vesselPointer20260203165419.mat';
+
+fName = 'sub-2_vesselPointer.mat';
 % S=2; arxvDir = '/local/users/Proulx-S/db/vsmDiamCenSur/sub-vsmDiamCenSurP2_acq-vfMRI_prsc-dflt_venc-none';
 % dir(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer*.mat']))
 % load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',['sub-' num2str(S) '_vesselPointer20260125165227.mat']));
@@ -122,17 +123,25 @@ nVessel = length(vIdxList);
 [p,~,~] = fileparts(vessels(vIdxList(1)).mask.f);
 
 tmpDir = fullfile(info.project.code,'tmp'); if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
-fMaskList = [vessels(vIdxList).mask]; fMaskList = {fMaskList.f}';
-fTof = info.subject.tof.fList{1};
-fSeg = info.subject.seg.fList{end};
 
-fSurfList       = cell(nVessel, 1);
-fCenterlineList = cell(nVessel, 1);
+fMaskList = [vessels(vIdxList).mask]; fMaskList = {fMaskList.f}';
+fTofList  = [vessels(vIdxList).tof]; fTofList = {fTofList.f}';
+mri1 = MRIread(fTofList{1}{1});
+mri2 = MRIread(fTofList{1}{2});
+mri2.volsize./mri1.volsize
+
+% fTof = info.subject.tof.fList{end};
+
+vmtk_viewVol(fTofList{1}{1});
+
+fSurfList              = cell(nVessel, 1);
+fCenterlineList        = cell(nVessel, 1);
+fCenterlineRefinedList = cell(nVessel, 1);
 for v = 1:nVessel
     vIdx = vIdxList(v);
-    fSurfList{v}              = fullfile(tmpDir, ['vessel-' sprintf('%02d',vIdx) '_surf.vtk']);
-    fCenterlineList{v}        = fullfile(tmpDir, ['vessel-' sprintf('%02d',vIdx) '_centerline.vtk']);
-    fCenterlineRefinedList{v} = fullfile(tmpDir, ['vessel-' sprintf('%02d',vIdx) '_refined.vtk']);
+    fSurfList{v}              = replace(fMaskList{v}, '_mask.nii.gz'   , '_surf.vtk');
+    fCenterlineList{v}        = replace(fMaskList{v}, '_mask.nii.gz'   , '_centerline.vtk');
+    fCenterlineRefinedList{v} = replace(fMaskList{v}, '_mask.nii.gz'   , '_centerlineRefined.vtk');
 end
 
 % Create surface for each vessel: marching cubes -> clean -> smoothing [-> upsample]
@@ -144,7 +153,9 @@ for v = 1:nVessel
         options.passband = 0.01;
         options.iterations = 2000;
         vmtk_surfSmoothing(fSurfList{v}, fSurfList{v}, options);
-        % vmtk_viewVolAndSurf(fMaskList{v}, fSurfList{v});
+
+        vmtk_viewVolAndSurf(fMaskList{v}, fSurfList{v});
+        vmtk_viewVolAndSurf(fTofList{v}{1}, fSurfList{v});
 
     end
 end
@@ -153,7 +164,10 @@ end
 for v = 1:nVessel
     if forceThis || ~exist(fCenterlineList{v},'file')
         cmd = vmtk_centerlinesFromSurf(fSurfList{v}, fCenterlineList{v}, [], [], 1);
-        % vmtk_viewVolAndSurf(fMaskList{v}, fCenterlineList{v});
+        vmtk_viewVolAndSurf(fMaskList{v}, fCenterlineList{v});
+        vmtk_viewVolAndSurf(fTofList{v}{1}, fCenterlineList{v});
+        vmtk_viewVolAndSurf(fTofList{v}{2}, fCenterlineList{v});
+
         % vmtk_viewVolAndSurf(fTof, fCenterlineList{v});
         % vmtk_viewVolAndSurf(fSeg, fCenterlineList{v});
         % vmtk_viewVolAndSurf(info.vessel(vIdx).seg.fList{end-2}, fCenterlineList{v});
