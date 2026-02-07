@@ -470,7 +470,46 @@ info.subject.label.fList;
 
 
 
-forceThis = 1;
+
+forceThis = 0;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Crop out each single vessel
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+for v = 1:nVessel
+    % inputs (all original size):
+
+    % scale-C_label=fLabelSelected; (scale-8 resolution)
+    % scale-1_tof  =tofCropPrc    ; (scale-1 resolution)
+    % scale-s_seg  =fSegList{s}   ; (scale-8 resolution)
+
+
+    % processing:
+
+    % scale-C_label -ImageMath(v=1,other=0)-> scale-8_tmpMask -ResampleImage(NN)-> scale-1_tmpMask -ResampleImage(NN)-> scale-8_tmpMask
+
+    % scale-1_tof -ResampleImage(NN)->    scale-8_interp-NN_tof
+    % scale-1_tof -ResampleImage(cubic)-> scale-8_interp-cubic_tof
+    
+    % scale-1_tof              -ExtractRegionFromImageByMask(scale-1_tmpMask)-> vessel-v_scale-1_tof
+    % scale-8_interp-NN_tof    -ExtractRegionFromImageByMask(scale-8_tmpMask)-> vessel-v_scale-8_interp-NN_tof
+    % scale-8_interp-cubic_tof -ExtractRegionFromImageByMask(scale-8_tmpMask)-> vessel-v_scale-8_interp-cubic_tof
+    for s = 1:length(fSegList)
+        % scale-s_seg              -ExtractRegionFromImageByMask(scale-8_tmpMask)-> vessel-v_scale-s_seg
+        % scale-s_label            -ExtractRegionFromImageByMask(scale-8_tmpMask)-> vessel-v_scale-s_label
+    end
+    % scale-C_label -ExtractRegionFromImageByMask(scale-8_tmpMask)-> vessel-v_scale-C_label -> vessel-v_mask
+
+
+    % outputs:
+    % vessel-v_mask                    ; (scale-8 resolution)
+    % vessel-v_scale-1_tof             ; (scale-1 resolution)
+    % vessel-v_scale-8_interp-NN_tof   ; (scale-8 resolution)
+    % vessel-v_scale-8_interp-cubic_tof; (scale-8 resolution)
+    % vessel-v_scale-s_label           ; (scale-8 resolution)
+    % vessel-v_scale-s_seg             ; (scale-8 resolution)
+end
+
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Crop out each single vessel
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -517,6 +556,20 @@ for v = 1:nVessel
         mriLike1.fspec = fLikeList{v,1};
         mriLike1.vol = imresize3(mriMask.vol, mriLike1.volsize, 'box');
         MRIwrite(mriLike1, fLikeList{v,1}, 'uchar');
+
+
+        cmd = {src.ants};
+        cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
+        cmd{end+1} = [fLabelSelected ' \'];
+        cmd{end+1} = [fLikeList{v,1} ' \'];
+        cmd{end+1} = [ ' \'];
+        system(strjoin(cmd,newline),'-echo');
+
+
+        
+
+
+
         % finding its bounding box
         [dim1, dim2, dim3] = ind2sub(size(mriLike1.vol), find(mriLike1.vol));
         dim1 = [min(dim1) max(dim1)];
@@ -544,13 +597,13 @@ for v = 1:nVessel
     end
     % Create like volume at high resolution
     if forceThis || ~exist(fLikeList{v,2},'file')
+        newDim = [max(usList)*(dim2(2)-dim2(1)+1) max(usList)*(dim1(2)-dim1(1)+1) max(usList)*(dim3(2)-dim3(1)+1)];
         disp('creating like volume at high resolution... computing');
         cmd = {src.ants};
-        cmd{end+1} = 'ResampleImageBySpacing 3 \';
+        cmd{end+1} = 'ResampleImage 3 \';
         cmd{end+1} = [fLikeList{v,1} ' \'];
         cmd{end+1} = [fLikeList{v,2} ' \'];
-        cmd{end+1} = [num2str(res/max(usList),'%.15g ') ' 0 0 1 \'];
-        cmd{end+1} = ['--interpolation NearestNeighbor'];
+        cmd{end+1} = [num2str(newDim,'%.15g ') '1 1 char \']; % dim2, dim1, dim3, 1 for dim input, 1 for NN, char output type
         system(strjoin(cmd,newline),'-echo');
         disp('creating like volume at high resolution... done');
     else

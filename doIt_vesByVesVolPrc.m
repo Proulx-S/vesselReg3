@@ -97,9 +97,6 @@ disp(projectScratch)
 scriptDir = fullfile(projectCode,scriptDir); if ~exist(scriptDir,'dir'); mkdir(scriptDir); end
 
 
-
-
-
 %%%%%%%%%%%%%%%%%%%
 %% Get data pointer
 %%%%%%%%%%%%%%%%%%%
@@ -114,12 +111,14 @@ load(fullfile(projectCode,'doIt_singleSlabTofVolPrc',fName));
 vessels = info.vessel;
 info.project.code
 
+
+
 return
 
 
 % choose good vessel
-% vIdxList = [6 7 8 11 12 13 14 17 19];
-vIdxList = [6];
+vIdxList = [6 7 8 11 12 13 14 17 19];
+% vIdxList = [6];
 nVessel = length(vIdxList);
 [p,~,~] = fileparts(vessels(vIdxList(1)).mask.f);
 
