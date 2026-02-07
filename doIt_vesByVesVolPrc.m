@@ -118,16 +118,22 @@ return
 
 
 % choose good vessel
-vIdxList = [6 7 8 11 12 13 14 17 19];
+% vIdxList = [6 7 8 11 12 13 14 17 19];
+vIdxList = [6];
 nVessel = length(vIdxList);
 [p,~,~] = fileparts(vessels(vIdxList(1)).mask.f);
 
 tmpDir = fullfile(info.project.code,'tmp'); if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
 
 fMaskList = [vessels(vIdxList).mask]; fMaskList = {fMaskList.f}';
-fTofList  = [vessels(vIdxList).tof]; fTofList = {fTofList.f}';
-mri1 = MRIread(fTofList{1}{1});
-mri2 = MRIread(fTofList{1}{2});
+fTofList  = [vessels(vIdxList).tof];   fTofList = cat(2,fTofList.f)';
+
+v = 1;
+fTofList(v,:)'
+replace(fTofList(:,3),'_interp-nn_','_interp-cubic_')
+mri1 = MRIread(fTofList{v,1});
+mri2 = MRIread(fTofList{v,2});
+mri3 = MRIread(fTofList{v,3});
 mri2.volsize./mri1.volsize
 
 % fTof = info.subject.tof.fList{end};
