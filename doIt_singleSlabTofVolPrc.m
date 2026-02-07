@@ -367,7 +367,7 @@ if forceThis || ~exist(info.subject.seg.fList{end},'file')
     copyfile(consensusSeg,info.subject.seg.fList{end});
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-upsampledTof
+upsampledTof;
 upsampledSegList;
 info.subject.tof.fList;
 info.subject.seg.fList;
@@ -485,7 +485,7 @@ fVesselSegList   = cell(nVessel, length(fSegList));
 fVesselLabelList = cell(nVessel, length(fSegList));
 fVesselMaskList  = cell(nVessel, 1               );
 fLikeList        = cell(nVessel, 2);
-tmpDir = tempname; if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
+% tmpDir = tempname; if ~exist(tmpDir,'dir'); mkdir(tmpDir); end
 for v = 1:nVessel
     disp(' ')
     disp('--------------------------------');
@@ -493,6 +493,7 @@ for v = 1:nVessel
     disp(['Vessel ' sprintf('%02d',v) ' (' num2str(v) '/' num2str(nVessel) ') cropping out...']);
     disp('---------------');
     disp('---------------');
+    clear cmd
     fVesselTofList{v,1} = replace(upsampledTof   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_scale-' '1'                  '_interp-nn_tof.nii.gz']);
     fVesselTofList{v,2} = replace(upsampledTof   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_scale-' num2str(max(usList)) '_interp-nn_tof.nii.gz']);
     fVesselTofList{v,3} = replace(upsampledTof   , '/tofUpsampled.nii.gz' , ['/vessel-' sprintf('%02d',v) '_scale-' num2str(max(usList)) '_interp-cubic_tof.nii.gz']);
@@ -506,18 +507,15 @@ for v = 1:nVessel
     s = length(fLabelList)-1; [p,f,e] = fileparts(fLabelList{s});
     fLikeList{v,2} = fullfile(p, ['vessel-' sprintf('%02d',v) '_scale-' num2str(usList(s-1)) '_like.nii.gz']);
     % Create vessel mask based on label map derived from consensus segmentation
-    if forceThis || ~exist(fLikeList{v,1},'file') || ~exist(fLikeList{v,2},'file')
-        mriLike       = mriLabel;
-        mriLike.vol   = mriLike.vol==v;
-        mriLike.fspec = fLikeList{v,2};
-    end
+    mriMask       = mriLabel;
+    mriMask.vol   = mriMask.vol==v;
     % Create like volume at low resolution
     if forceThis || ~exist(fLikeList{v,1},'file')
         disp('creating like volume at low resolution... computing');
         % by downsampling the mask back to the original resolution
         mriLike1 = MRIread(tofCropPrc,1);
         mriLike1.fspec = fLikeList{v,1};
-        mriLike1.vol = imresize3(mriLike.vol, mriLike1.volsize, 'box');
+        mriLike1.vol = imresize3(mriMask.vol, mriLike1.volsize, 'box');
         MRIwrite(mriLike1, fLikeList{v,1}, 'uchar');
         % finding its bounding box
         [dim1, dim2, dim3] = ind2sub(size(mriLike1.vol), find(mriLike1.vol));
@@ -547,51 +545,59 @@ for v = 1:nVessel
     % Create like volume at high resolution
     if forceThis || ~exist(fLikeList{v,2},'file')
         disp('creating like volume at high resolution... computing');
-        MRIwrite(mriLike, fLikeList{v,2},'uchar');
-        cmd{end+1} = src.fs; 
-        cmd{end+1} = 'mri_convert \';
-        cmd{end+1} = ['--voxsize ' strjoin(arrayfun(@(x) num2str(x,'%.15g'), res./max(usList), 'UniformOutput', false), ' ') ' \'];
-        cmd{end+1} = ['--resample_type nearest \'];
+        cmd = {src.ants};
+        cmd{end+1} = 'ResampleImageBySpacing 3 \';
         cmd{end+1} = [fLikeList{v,1} ' \'];
-        cmd{end+1} = fLikeList{v,2};
+        cmd{end+1} = [fLikeList{v,2} ' \'];
+        cmd{end+1} = [num2str(res/max(usList),'%.15g ') ' 0 0 1 \'];
+        cmd{end+1} = ['--interpolation NearestNeighbor'];
         system(strjoin(cmd,newline),'-echo');
         disp('creating like volume at high resolution... done');
     else
         disp('creating like volume at high resolution... already done');
     end
     % Resample other data to the geometry defined by each like volume
-    cmd = {src.fs};
     % mask
     if forceThis || ~exist(fVesselMaskList{v},'file')
         disp('resampling mask...');
-        cmd{end+1} = 'mri_vol2vol \';
-        cmd{end+1} = ['--mov ' fVesselMaskList{v} ' \'];
-        cmd{end+1} = ['--targ ' fLikeList{v,2} ' \'];
-        cmd{end+1} = ['--o ' fVesselMaskList{v} ' \'];
-        cmd{end+1} = '--regheader --nearest --keep-precision';
+        MRIwrite(mriMask, fVesselMaskList{v},'uchar');
+        cmd = {src.ants};
+        cmd{end+1} = 'antsApplyTransforms -d 3 \';
+        cmd{end+1} = ['-r ' fLikeList{v,2} ' \'];
+        cmd{end+1} = ['-i ' fVesselMaskList{v} ' \'];
+        cmd{end+1} = ['-o ' fVesselMaskList{v} ' \'];
+        cmd{end+1} = '-t identity -n NearestNeighbor -u uchar';
+        system(strjoin(cmd,newline),'-echo');
+        disp('resampling mask... done.');
     else
-        disp('resampling mask... already done');
+        disp('resampling mask... already done.');
     end
     for s = 1:length(fSegList)
         % seg
         if forceThis || ~exist(fVesselSegList{v,s},'file')
             disp(['resampling seg at scale ' num2str(s) 'of ' num2str(length(fSegList)) '...']);
-            cmd{end+1} = 'mri_vol2vol \';
-            cmd{end+1} = ['--mov ' fSegList{s} ' \'];
-            cmd{end+1} = ['--targ ' fLikeList{v,2} ' \'];
-            cmd{end+1} = ['--o ' fVesselSegList{v,s} ' \'];
-            cmd{end+1} = '--regheader --nearest --keep-precision';
+            cmd = {src.ants};
+            cmd{end+1} = 'antsApplyTransforms -d 3 \';
+            cmd{end+1} = ['-r ' fLikeList{v,2} ' \'];
+            cmd{end+1} = ['-i ' fSegList{s} ' \'];
+            cmd{end+1} = ['-o ' fVesselSegList{v,s} ' \'];
+            cmd{end+1} = '-t identity -n NearestNeighbor';
+            system(strjoin(cmd,newline),'-echo');
+            disp(['resampling seg at scale ' num2str(s) 'of ' num2str(length(fSegList)) '... done']);
         else
             disp(['resampling seg at scale ' num2str(s) 'of ' num2str(length(fSegList)) '... already done']);
         end
         % label
         if forceThis || ~exist(fVesselLabelList{v,s},'file')
             disp(['resampling label at scale ' num2str(s) 'of ' num2str(length(fSegList)) '...']);
-            cmd{end+1} = 'mri_vol2vol \';
-            cmd{end+1} = ['--mov ' fLabelList{s} ' \'];
-            cmd{end+1} = ['--targ ' fLikeList{v,2} ' \'];
-            cmd{end+1} = ['--o ' fVesselLabelList{v,s} ' \'];
-            cmd{end+1} = '--regheader --nearest --keep-precision';
+            cmd = {src.ants};
+            cmd{end+1} = 'antsApplyTransforms -d 3 \';
+            cmd{end+1} = ['-r ' fLikeList{v,2} ' \'];
+            cmd{end+1} = ['-i ' fLabelList{s} ' \'];
+            cmd{end+1} = ['-o ' fVesselLabelList{v,s} ' \'];
+            cmd{end+1} = '-t identity -n NearestNeighbor';
+            system(strjoin(cmd,newline),'-echo');
+            disp(['resampling label at scale ' num2str(s) 'of ' num2str(length(fSegList)) '... done']);
         else
             disp(['resampling label at scale ' num2str(s) 'of ' num2str(length(fSegList)) '... already done']);
         end
@@ -599,33 +605,42 @@ for v = 1:nVessel
     % tof
     if forceThis || ~exist(fVesselTofList{v,1},'file')
         disp(['resampling tof at scale ' num2str(1) 'of ' num2str(length(fSegList)) '...']);
-        cmd{end+1} = 'mri_vol2vol \';
-        cmd{end+1} = ['--mov ' tofCropPrc ' \'];
-        cmd{end+1} = ['--targ ' fLikeList{v,1} ' \'];
-        cmd{end+1} = ['--o ' fVesselTofList{v,1} ' \'];
-        cmd{end+1} = '--regheader --cubic --keep-precision';
+        cmd = {src.ants};
+        cmd{end+1} = 'antsApplyTransforms -d 3 \';
+        cmd{end+1} = ['-r ' fLikeList{v,1} ' \'];
+        cmd{end+1} = ['-i ' tofCropPrc ' \'];
+        cmd{end+1} = ['-o ' fVesselTofList{v,1} ' \'];
+        cmd{end+1} = '-t identity -n NearestNeighbor';
+        system(strjoin(cmd,newline),'-echo');
+        disp(['resampling tof at scale ' num2str(1) 'of ' num2str(length(fSegList)) '... done']);
     else
         disp(['resampling tof at scale ' num2str(1) 'of ' num2str(length(fSegList)) '... already done']);
     end
     % tof upsampled nearest
     if forceThis || ~exist(fVesselTofList{v,2},'file')
         disp(['resampling tof at scale ' num2str(length(fSegList)) 'of ' num2str(length(fSegList)) '...']);
-        cmd{end+1} = 'mri_vol2vol \';
-        cmd{end+1} = ['--mov ' tofCropPrcScl{end} ' \'];
-        cmd{end+1} = ['--targ ' fLikeList{v,2} ' \'];
-        cmd{end+1} = ['--o ' fVesselTofList{v,2} ' \'];
-        cmd{end+1} = '--regheader --nearest --keep-precision';
+        cmd = {src.ants};
+        cmd{end+1} = 'antsApplyTransforms -d 3 \';
+        cmd{end+1} = ['-r ' fLikeList{v,2} ' \'];
+        cmd{end+1} = ['-i ' tofCropPrc ' \'];
+        cmd{end+1} = ['-o ' fVesselTofList{v,2} ' \'];
+        cmd{end+1} = '-t identity -n NearestNeighbor';
+        system(strjoin(cmd,newline),'-echo');
+        disp(['resampling tof at scale ' num2str(length(fSegList)) 'of ' num2str(length(fSegList)) '... done']);
     else
         disp(['resampling tof at scale ' num2str(length(fSegList)) 'of ' num2str(length(fSegList)) '... already done']);
     end
     % tof upsampled cubic
     if forceThis || ~exist(fVesselTofList{v,3},'file')
         disp(['resampling tof at scale ' num2str(length(fSegList)) 'of ' num2str(length(fSegList)) '...']);
-        cmd{end+1} = 'mri_vol2vol \';
-        cmd{end+1} = ['--mov ' tofCropPrcScl{end} ' \'];
-        cmd{end+1} = ['--targ ' fLikeList{v,2} ' \'];
-        cmd{end+1} = ['--o ' fVesselTofList{v,3} ' \'];
-        cmd{end+1} = '--regheader --cubic --keep-precision';
+        cmd = {src.ants};
+        cmd{end+1} = 'antsApplyTransforms -d 3 \';
+        cmd{end+1} = ['-r ' fLikeList{v,2} ' \'];
+        cmd{end+1} = ['-i ' tofCropPrcScl{end} ' \'];
+        cmd{end+1} = ['-o ' fVesselTofList{v,3} ' \'];
+        cmd{end+1} = '-t identity -n NearestNeighbor';
+        system(strjoin(cmd,newline),'-echo');
+        disp(['resampling tof at scale ' num2str(length(fSegList)) 'of ' num2str(length(fSegList)) '... done']);
     else
         disp(['resampling tof at scale ' num2str(length(fSegList)) 'of ' num2str(length(fSegList)) '... already done']);
     end
@@ -658,7 +673,7 @@ for v = 1:nVessel
         copyfile(fVesselTofList{v},info.vessel(v).tof.f{2});
     end
     %tof (upsampled cubic)
-    info.vessel(v).tof.f{end+1,1} = fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_scale-' num2str(max(usList)) '_interp-nn_tof.nii.gz']);
+    info.vessel(v).tof.f{end+1,1} = fullfile(info.project.code,'result','tof',['vessel-' sprintf('%02d',v) '_scale-' num2str(max(usList)) '_interp-cubic_tof.nii.gz']);
     if ~exist(fileparts(info.vessel(v).tof.f{3}),'dir'); mkdir(fileparts(info.vessel(v).tof.f{3})); end
     if forceThis || ~exist(info.vessel(v).tof.f{3},'file')
         copyfile(fVesselTofList{v},info.vessel(v).tof.f{3});
@@ -695,7 +710,7 @@ for v = 1:nVessel
         end        
     end
 end
-rmdir(tmpDir, 's'); clear tmpDir;
+% rmdir(tmpDir, 's'); clear tmpDir;
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%
 fVesselTofList;
 fVesselLabelList;
