@@ -509,7 +509,7 @@ if forceThis || ~exist(fScale8NNTof,'file') || ~exist(fScale8CubicTof,'file')
     mriTof = MRIread(fScale1Tof, 1);
     dim1 = mriTof.volsize;
     dim8 = dim1 * max(usList);
-    dim8Str = sprintf('%d %d %d', dim8(1), dim8(2), dim8(3));
+    dim8Str = sprintf('%dx%dx%d', dim8(2), dim8(1), dim8(3));
     % to scale-8 (NN)
     if forceThis || ~exist(fScale8NNTof,'file')
         disp('creating full-volume scale-8 TOF (NN)...');
@@ -518,7 +518,7 @@ if forceThis || ~exist(fScale8NNTof,'file') || ~exist(fScale8CubicTof,'file')
         cmd{end+1} = [fScale1Tof ' \'];
         cmd{end+1} = [fScale8NNTof ' \'];
         cmd{end+1} = [dim8Str ' \'];
-        cmd{end+1} = ['1 1 float']; % [1 for voxel count input, 1 for NN, float output type]
+        cmd{end+1} = ['1 1 2']; % [1 = voxel count input, 1 = NN interpolation, 2 = float output type]
         system(strjoin(cmd, newline), '-echo');
         disp('creating full-volume scale-8 TOF (NN)... done');
     else
@@ -532,7 +532,7 @@ if forceThis || ~exist(fScale8NNTof,'file') || ~exist(fScale8CubicTof,'file')
         cmd{end+1} = [fScale1Tof ' \'];
         cmd{end+1} = [fScale8CubicTof ' \'];
         cmd{end+1} = [dim8Str ' \'];
-        cmd{end+1} = ['1 4 3 float']; % [1 for voxel count input, 4 for bspline interpolation, 3 for cubic spline, float output type]
+        cmd{end+1} = ['1 4 3 6']; % [1 = voxel count input, 4 = bspline interpolation, 3 = cubic spline, 6 = float output type]
         system(strjoin(cmd, newline), '-echo');
         disp('creating full-volume scale-8 TOF (cubic)... done');
     else
@@ -550,21 +550,21 @@ for v = 6%1:nVessel
         % Create vessel mask from scale-C label
         disp('creating vessel mask... computing');
         mriMask = mriLabel;
-        mriMask.vol = mriMask.vol == v;
+        mriMask.vol = mriMask.vol==v;
         MRIwrite(mriMask, fTmpMask8, 'uchar');
         % Resample vessel mask
         % downsample to scale-1
         dim8 = mriMask.volsize;
         dim1 = dim8 / max(usList);
-        dim1Str = sprintf('%d %d %d', dim1(1), dim1(2), dim1(3));
-        dim8Str = sprintf('%d %d %d', dim8(1), dim8(2), dim8(3));
+        dim1Str = sprintf('%dx%dx%d', dim1(2), dim1(1), dim1(3));
+        dim8Str = sprintf('%dx%dx%d', dim8(2), dim8(1), dim8(3));
         cmd = {src.ants};
         cmd{end+1} = 'ResampleImage 3 \';
         cmd{end+1} = [fTmpMask8 ' \'];
         cmd{end+1} = [fTmpMask1 ' \'];
         cmd{end+1} = [dim1Str   ' \'];
-        cmd{end+1} = ['1 1 uchar']; % [1 for voxel count input, 1 for NN, uchar output type]
-        system(strjoin(cmd, newline), '-echo');
+        cmd{end+1} = ['1 1 1']; % [1 = voxel count input, 1 = NN interpolation, 1 = uchar output type]
+        [status,result] = system(strjoin(cmd, newline), '-echo');
         % ensure block-max resampling
         mri = MRIread(fTmpMask1,1);
         mri.vol = imresize3(mriMask.vol, mri.volsize, 'box');
@@ -575,8 +575,8 @@ for v = 6%1:nVessel
         cmd{end+1} = [fTmpMask1 ' \'];
         cmd{end+1} = [fTmpMask8 ' \'];
         cmd{end+1} = [dim8Str ' \'];
-        cmd{end+1} = ['1 1 uchar']; % [1 for voxel count input, 1 for NN, uchar output type]
-        system(strjoin(cmd, newline), '-echo');
+        cmd{end+1} = ['1 1 1']; % [1 for voxel count input, 1 for NN, 1=uchar output type]
+        [status,result] = system(strjoin(cmd, newline), '-echo');
         disp('creating vessel mask... done');
     else
         disp('creating vessel mask... already done');
@@ -584,7 +584,7 @@ for v = 6%1:nVessel
     
     % Crop vessel
     % from scale-1 tof
-    if ~exist(fVesselTofList{v,1},'file')
+    if forceThis || ~exist(fVesselTofList{v,1},'file')
         disp('cropping vessel from scale-1 tof... computing');
         cmd = {src.ants};
         cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
@@ -592,13 +592,13 @@ for v = 6%1:nVessel
         cmd{end+1} = [fVesselTofList{v,1} ' \'];
         cmd{end+1} = [fTmpMask1 ' \'];
         cmd{end+1} = ['1 1']; % [label, padRadius]
-        system(strjoin(cmd, newline), '-echo');
+        [status,result] = system(strjoin(cmd, newline), '-echo');
         disp('cropping vessel from scale-1 tof... done');
     else
         disp('cropping vessel from scale-1 tof... already done');
     end
     % from scale-8 TOF (NN)
-    if ~exist(fVesselTofList{v,2},'file')
+    if forceThis || ~exist(fVesselTofList{v,2},'file')
         disp('cropping vessel from scale-8 TOF (NN)... computing');
         cmd = {src.ants};
         cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
@@ -606,13 +606,13 @@ for v = 6%1:nVessel
         cmd{end+1} = [fVesselTofList{v,2} ' \'];
         cmd{end+1} = [fTmpMask8 ' \'];
         cmd{end+1} = ['1 8']; % [label, padRadius]
-        system(strjoin(cmd, newline), '-echo');
+        [status,result] = system(strjoin(cmd, newline), '-echo');
         disp('cropping vessel from scale-8 TOF (NN)... done');
     else
         disp('cropping vessel from scale-8 TOF (NN)... already done');
     end
     % from scale-8 TOF (cubic)
-    if ~exist(fVesselTofList{v,3},'file')
+    if forceThis || ~exist(fVesselTofList{v,3},'file')
         disp('cropping vessel from scale-8 TOF (cubic)... computing');
         cmd = {src.ants};
         cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
@@ -620,14 +620,14 @@ for v = 6%1:nVessel
         cmd{end+1} = [fVesselTofList{v,3} ' \'];
         cmd{end+1} = [fTmpMask8 ' \'];
         cmd{end+1} = ['1 8']; % [label, padRadius]
-        system(strjoin(cmd, newline), '-echo');
+        [status,result] = system(strjoin(cmd, newline), '-echo');
         disp('cropping vessel from scale-8 TOF (cubic)... done');
     else
         disp('cropping vessel from scale-8 TOF (cubic)... already done');
     end
     for s = 1:length(fSegList)
         % from scale-s seg
-        if ~exist(fVesselSegList{v,s},'file')
+        if forceThis || ~exist(fVesselSegList{v,s},'file')
             disp('cropping vessel from scale-s seg... computing');
             cmd = {src.ants};
             cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
@@ -635,13 +635,13 @@ for v = 6%1:nVessel
             cmd{end+1} = [fVesselSegList{v,s} ' \'];
             cmd{end+1} = [fTmpMask8 ' \'];
             cmd{end+1} = ['1 8']; % [label, padRadius]
-            system(strjoin(cmd, newline), '-echo');
+            [status,result] = system(strjoin(cmd, newline), '-echo');
             disp('cropping vessel from scale-s seg... done');
         else
             disp('cropping vessel from scale-s seg... already done');
         end
         % from scale-s label
-        if ~exist(fVesselLabelList{v,s},'file')
+        if forceThis || ~exist(fVesselLabelList{v,s},'file')
             disp('cropping vessel from scale-s label... computing');
             cmd = {src.ants};
             cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
@@ -649,14 +649,14 @@ for v = 6%1:nVessel
             cmd{end+1} = [fVesselLabelList{v,s} ' \'];
             cmd{end+1} = [fTmpMask8 ' \'];
             cmd{end+1} = ['1 8']; % [label, padRadius]
-            system(strjoin(cmd, newline), '-echo');
+            [status,result] = system(strjoin(cmd, newline), '-echo');
             disp('cropping vessel from scale-s label... done');
         else
             disp('cropping vessel from scale-s label... already done');
         end
     end
     % from scale-C mask
-    if ~exist(fVesselMaskList{v},'file')
+    if forceThis || ~exist(fVesselMaskList{v},'file')
         disp('cropping vessel from scale-C mask... computing');
         cmd = {src.ants};
         cmd{end+1} = 'ExtractRegionFromImageByMask 3 \';
@@ -664,7 +664,7 @@ for v = 6%1:nVessel
         cmd{end+1} = [fVesselMaskList{v} ' \'];
         cmd{end+1} = [fTmpMask8 ' \'];
         cmd{end+1} = ['1 8']; % [label, padRadius]
-        system(strjoin(cmd, newline), '-echo');
+        [status,result] = system(strjoin(cmd, newline), '-echo');
         disp('cropping vessel from scale-C mask... done');
     else
         disp('cropping vessel from scale-C mask... already done');
