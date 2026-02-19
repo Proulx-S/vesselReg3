@@ -393,12 +393,13 @@ if forceThis || ~exist(info.subject.visualize.f,'file')
 end
 info.subject.visualize.cmd = cmd;
 %% %%%%%%%%%%%%%%%%%
+info.subject.visualize;
 disp(strjoin(cmd,newline));
 
 
 
 
-forceThis = 0;
+forceThis = 1;
 %%%%%%%%%%%%%%%%%%%%%%
 %% Save vessel pointer
 %%%%%%%%%%%%%%%%%%%%%%
@@ -413,6 +414,8 @@ if forceThis || ~exist(info.pointerFile.msVesselBoost,'file')
 end
 %% %%%%%%%%%%%%%%%%%%%
 info;
+
+
 
 
 skipThis = 1;
@@ -430,3 +433,4 @@ for i = 1:numel(tmpFiles)
         delete(tmpFiles{i});
     end
 end
+%% %%%%%%%%%
