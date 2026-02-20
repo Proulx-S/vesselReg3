@@ -1,6 +1,5 @@
 **/*.mat
-!doIt_singleSlabTofVolPrc/**/*.mat
 tmp/
-doIt_vesByVesVolPrc/
-old/
-result/
+msVesselBoost/
+selectVessels/
+cropVessels/
