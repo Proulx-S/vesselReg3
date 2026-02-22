@@ -171,7 +171,7 @@ for v = 1:nVessel
 end
 
 % Active tube refinement
-forceThis = 1;
+forceThis = 0;
 for v = 1:nVessel
     if forceThis || ~exist(fCenterlineRefinedList{v},'file')
         % fCenterlineRefinedList{v} = vmtk_activetubes(fTofList{v}, fCenterlineList{v}, fCenterlineRefinedList{v}, opts);
@@ -197,6 +197,13 @@ for v = 1:nVessel
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+
+
+return
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Merge vessel centerlines
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
 vIdx = [info.vessel.ok];
 vessel = info.vessel(vIdx);
 
@@ -206,9 +213,27 @@ nVessel = size(fCenterlineList,1);
 
 
 fTofRef = info.subject.tof.fList{1};
+
+% Merge all vessel centerlines into one VTK (vessel voxel -> RAS; output in scanner mm)
+if nVessel >= 1
+    baseDir = fileparts(fCenterlineList{1});
+    fCombinedCenterline = fullfile(baseDir, 'combined_centerlines.vtk');
+    merge_centerlines_to_vtk(fCenterlineList, fTofList, fTofRef, fCombinedCenterline);
+end
+
+% View with source_nii so combined (in RAS) is aligned to reference volume for correct overlay
+vmtk_viewVolAndSurf(fTofRef, fCombinedCenterline, 0, fTofRef);
+
 fCenterlineList
 fTofList
 
+baseDir = fileparts(fCenterlineList{1});
+run_centerline_coord_tests(fCenterlineList, fTofList, fTofRef);
+vmtk_viewVolAndSurf(fTofRef, fullfile(baseDir,'coord_tests','test_1_ras.vtk'));
+vmtk_viewVolAndSurf(fTofRef, fullfile(baseDir,'coord_tests','test_2_ref_display.vtk'));
+vmtk_viewVolAndSurf(fTofRef, fullfile(baseDir,'coord_tests','test_3_ref_voxel.vtk'));
+vmtk_viewVolAndSurf(fTofRef, fullfile(baseDir,'coord_tests','test_4_lps.vtk'));
+vmtk_viewVolAndSurf(fTofRef, fullfile(baseDir,'coord_tests','test_5_ras_minus_ref_origin.vtk'));
 
 
 
