@@ -130,11 +130,11 @@ fSurfList              = cell(nVessel, 1);
 fCenterlineList        = cell(nVessel, 1);
 fCenterlineRefinedList = cell(nVessel, 1);
 for v = 1:nVessel
-    fMaskList{v}              = info.vessel(v).mask.fList{1};
+    fMaskList{v}              = info.vessel(v).maskUncropped.fList{1};
     fTofList(v,:)             = info.vessel(v).tof.fList;
-    fSurfList{v}              = replace(info.vessel(v).mask.fList{1}, '_mask.nii.gz'   , '_surf.vtk');
-    fCenterlineList{v}        = replace(info.vessel(v).mask.fList{1}, '_mask.nii.gz'   , '_centerline.vtk');
-    fCenterlineRefinedList{v} = replace(info.vessel(v).mask.fList{1}, '_mask.nii.gz'   , '_centerlineRefined.vtk');
+    fSurfList{v}              = replace(info.vessel(v).maskUncropped.fList{1}, '_mask.nii.gz'   , '_surf.vtk');
+    fCenterlineList{v}        = replace(info.vessel(v).maskUncropped.fList{1}, '_mask.nii.gz'   , '_centerline.vtk');
+    fCenterlineRefinedList{v} = replace(info.vessel(v).maskUncropped.fList{1}, '_mask.nii.gz'   , '_centerlineRefined.vtk');
 end
 
 % Create surface for each vessel: marching cubes -> clean -> smoothing
@@ -160,7 +160,7 @@ for v = 1:nVessel
         cmd = {src.vmtk};
         cmd{end+1} = 'vmtkcenterlines \';
         cmd{end+1} = ['-ifile ' fSurfList{v} ' \'];
-        cmd{end+1} = ['-ofile ' fCenterlineList{v}];
+        cmd{end+1} = ['-ofile ' fCenterlineList{v} ' &'];
         disp(strjoin(cmd,newline));
     end
 end
@@ -169,6 +169,40 @@ for v = 1:nVessel
         vmtk_viewVolAndSurf(fTofList{v,1}, fCenterlineList{v});
     end
 end
+
+% Merge centerlines into one file
+forceThis = 0;
+info.subject.centerline.fList = {fullfile(info.project.code, 'vesselPrc', 'centerlines', 'vessel-00_centerline.vtk')};
+if ~exist(info.subject.centerline.fList{1},'dir'); mkdir(info.subject.centerline.fList{1}); end
+if forceThis || ~exist(info.subject.centerline.fList{1},'file')
+    mergeCenterlines(fCenterlineList, char(info.subject.centerline.fList));
+end
+vmtk_viewVolAndSurf(info.subject.tof.fList{1}, info.subject.centerline.fList{1});
+
+info.subject.centerline.fList{2} = fullfile(info.project.code, 'vesselPrc', 'centerlines', 'vessel-00_desc-activetubes_centerline.vtk');
+cmd = {src.vmtk};
+cmd{end+1} = 'vmtkactivetubes \';
+cmd{end+1} = ['-imagefile ' info.subject.tof.fList{2} ' \'];
+cmd{end+1} = ['-ifile ' info.subject.centerline.fList{1} ' \'];
+cmd{end+1} = ['-ofile ' info.subject.centerline.fList{2}];
+[status, result] = system(strjoin(cmd,newline),'-echo');
+
+vmtk_viewVolAndSurf(info.subject.tof.fList{1}, info.subject.centerline.fList{2});
+
+
+vmtk_view([info.subject.tof.fList(1) info.subject.centerline.fList])
+vmtk_view(fCenterlineList(1:2))
+% vmtkcenterlinemodeller
+% vmtkcenterlinelabeler
+% vmtkmeshcutter
+% vmtknetworkeditor
+% vmtknetworkextraction
+% vmtksurfaceappend
+% surf1=/scratch/users/Proulx-S/vesselReg3/vesselPrc/centerlines/vessel-00_centerline.vtk
+% surf2=/scratch/users/Proulx-S/vesselReg3/vesselPrc/centerlines/vessel-00_desc-activetubes_centerline.vtk
+% vmtksurfacereader -ifile $surf1 --pipe vmtkrenderer --pipe vmtksurfaceviewer -color 0 1 0 -display 0 --pipe vmtksurfacereader -ifile $surf2 --pipe vmtksurfaceviewer -i @vmtksurfacereader.o -color 1 0 0
+
+
 
 % Active tube refinement
 forceThis = 0;
@@ -197,6 +231,9 @@ for v = 1:nVessel
 end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%
 
+fCenterlineAll = [fCenterlineList{end}];
+fCenterlineList
+out = mergeCenterlines(fCenterlineList, fullfile(baseDir, 'merged.vtk'));
 
 
 
