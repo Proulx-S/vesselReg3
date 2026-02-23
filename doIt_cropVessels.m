@@ -117,15 +117,14 @@ load(selectVessels_pointerFile); % overwrites info, but should be fine
 info.toClean = {};
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%
 info;
+nVessel = length(info.subject.label.selectedVesselIdx);
 
 
 
-
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Write temporary crop masks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-nVessel    = length(info.subject.label.selectedVesselIdx);
 fCropMask1 = cell(nVessel, 1);
 fCropMaskC = cell(nVessel, 1);
 for v = 1:nVessel
@@ -161,7 +160,7 @@ fCropMask1;
 fCropMaskC;
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Crop out each single vessel from tof
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -200,7 +199,9 @@ end
 fVesselTofList;
 
 
-forceThis = 1;
+
+
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Crop out each single vessel from seg
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -242,7 +243,7 @@ fVesselSegList;
 
 
 
-forceThis = 1;
+forceThis = 0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Crop out each single vessel from label
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -272,8 +273,39 @@ fVesselLabelList;
 
 
 forceThis = 1;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Generate mask from label
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Generate mask from each vessel label
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+fLabel = info.subject.label.fList{2};
+fVesselMaskUncroppedList = cell(nVessel, 1);
+for v = 1:nVessel
+    f = strsplit(fVesselLabelList{v}, filesep);
+    f = replace(f{end}, '_label.', '_mask.');
+    f = replace(f, 'desc-selected_', 'desc-selectedNotCropped_');
+    fVesselMaskUncroppedList{v} = fullfile(info.project.code, 'cropVessels', 'mask', f);
+    if ~exist(fileparts(fVesselMaskUncroppedList{v}), 'dir'); mkdir(fileparts(fVesselMaskUncroppedList{v})); end
+    if forceThis || ~exist(fVesselMaskUncroppedList{v}, 'file')
+        disp(['generating mask from uncropped label for vessel (' num2str(v) '/' num2str(nVessel) ')... computing']);
+        cmd = {src.ants};
+        cmd{end+1} = ['ThresholdImage 3 \'];
+        cmd{end+1} = [fLabel ' \'];
+        cmd{end+1} = [fVesselMaskUncroppedList{v} ' \'];
+        cmd{end+1} = [num2str(v) ' ' num2str(v) ' 1 0']; % threshlo threshhi insideValue outsideValue
+        [status, result] = system(strjoin(cmd, newline)); if status ~= 0; dbstack; error(result); end
+        disp(['generating mask from uncropped label for vessel (' num2str(v) '/' num2str(nVessel) ')... done']);
+    else
+        disp(['generating mask from uncropped label for vessel (' num2str(v) '/' num2str(nVessel) ')... already done']);
+    end
+end
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+fVesselMaskUncroppedList;
+
+
+
+
+forceThis = 0;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Generate mask from each croppped label
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 fVesselMaskList = cell(size(fVesselLabelList));
 for v = 1:nVessel
@@ -294,7 +326,7 @@ for v = 1:nVessel
         disp(['generating mask from label for vessel (' num2str(v) '/' num2str(nVessel) ')... already done']);
     end
 end
-%% %%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 fVesselMaskList;
 
 
@@ -308,6 +340,7 @@ for v = 1:nVessel
     info.vessel(v,1).seg.fList   = fVesselSegList(v,:)';
     info.vessel(v,1).label.fList = fVesselLabelList(v,:)';
     info.vessel(v,1).mask.fList  = fVesselMaskList(v,:)';
+    info.vessel(v,1).maskUncropped.fList = fVesselMaskUncroppedList(v,:)';
 end
 info.pointerFile.cropVessels = fullfile(info.project.code,'cropVessels',['sub-' num2str(S) '_cropVesselsPointer.mat']);
 if ~exist(fileparts(info.pointerFile.cropVessels),'dir'); mkdir(fileparts(info.pointerFile.cropVessels)); end
